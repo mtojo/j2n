@@ -1,0 +1,144 @@
+#include <{{range .NamespacePrefix}}{{.}}/{{end}}{{.PackageName}}/{{ReplaceAll .ClassName "$" "_"}}.{{.HeaderExt}}>
+
+{{range .Dependencies}}
+#include <{{.}}>
+{{end}}
+
+{{range .NamespacePrefix}}
+namespace {{.}}
+{
+{{end}}
+
+{{range (Split .PackageName "/")}}
+namespace {{.}}{{if IsReserved .}}_{{end}}
+{
+{{end}}
+
+{{if eq .FullName "java/lang/String"}}
+String::String(const std::string& s)
+  : String({{range $.NamespacePrefix}}{{.}}::{{end}}JNIHelper::detail::newString(s.c_str(), s.size()).get())
+{
+}
+
+String::String(const char* s, std::size_t count)
+  : String({{range $.NamespacePrefix}}{{.}}::{{end}}JNIHelper::detail::newString(s, count).get())
+{
+}
+{{end}}
+
+{{range .Initializers}}
+{{ReplaceAll $.ClassName "$" "_"}}::{{ReplaceAll $.ClassName "$" "_"}}({{range $index, $element := .ArgumentTypes}}{{if $index}}, {{end}}{{if IsPrimitive $element}}{{$element}}{{else}}const {{ReplaceAll $element "$" "_"}}&{{end}} _{{$index}}{{end}})
+  : {{ReplaceAll $.ClassName "$" "_"}}({{range $.NamespacePrefix}}{{.}}::{{end}}JNIHelper::detail::newObject("{{$.PackageName}}/{{$.ClassName}}", "{{.Signature}}"{{range $index, $element := .ArgumentTypes}}, _{{$index}}{{end}}).get())
+{
+}
+{{end}}
+
+{{if .SuperClass}}
+{{ReplaceAll .ClassName "$" "_"}}::{{ReplaceAll .ClassName "$" "_"}}(jobject obj) : base_type(obj)
+{
+}
+
+{{ReplaceAll .ClassName "$" "_"}}::{{ReplaceAll .ClassName "$" "_"}}({{ReplaceAll .ClassName "$" "_"}}&& other) noexcept : base_type(std::move(other))
+{
+}
+{{else}}
+{{ReplaceAll .ClassName "$" "_"}}::{{ReplaceAll .ClassName "$" "_"}}(jobject obj)
+  : obj_({{range $.NamespacePrefix}}{{.}}::{{end}}JNIHelper::getJNIEnv()->NewGlobalRef(obj))
+{
+}
+
+{{ReplaceAll .ClassName "$" "_"}}::{{ReplaceAll .ClassName "$" "_"}}({{ReplaceAll .ClassName "$" "_"}}&& other) noexcept : obj_(other.obj_)
+{
+  other.obj_ = nullptr;
+}
+
+{{ReplaceAll .ClassName "$" "_"}}::~{{ReplaceAll .ClassName "$" "_"}}()
+{
+  if (this->obj_ != nullptr)
+  {
+    {{range $.NamespacePrefix}}{{.}}::{{end}}JNIHelper::getJNIEnv()->DeleteGlobalRef(this->obj_);
+  }
+}
+{{end}}
+
+{{range .Methods}}
+{{if .IsStatic}}
+{{ReplaceAll .ReturnType "$" "_"}} {{ReplaceAll $.ClassName "$" "_"}}::{{.Name}}{{if IsReserved .Name}}_{{end}}({{range $index, $element := .ArgumentTypes}}{{if $index}}, {{end}}{{if IsPrimitive $element}}{{$element}}{{else}}const {{ReplaceAll $element "$" "_"}}&{{end}} _{{$index}}{{end}})
+{
+  {{if ne .ReturnType "void"}}return {{end}}{{range $.NamespacePrefix}}{{.}}::{{end}}JNIHelper::callStaticMethod<{{ReplaceAll .ReturnType "$" "_"}}>("{{$.PackageName}}/{{$.ClassName}}", "{{.Name}}", "{{.Signature}}"{{range $index, $element := .ArgumentTypes}}, _{{$index}}{{end}});
+}
+{{else}}
+{{ReplaceAll .ReturnType "$" "_"}} {{ReplaceAll $.ClassName "$" "_"}}::{{.Name}}{{if IsReserved .Name}}_{{end}}({{range $index, $element := .ArgumentTypes}}{{if $index}}, {{end}}{{if IsPrimitive $element}}{{$element}}{{else}}const {{ReplaceAll $element "$" "_"}}&{{end}} _{{$index}}{{end}})
+{
+  {{if ne .ReturnType "void"}}return {{end}}{{range $.NamespacePrefix}}{{.}}::{{end}}JNIHelper::callMethod<{{ReplaceAll .ReturnType "$" "_"}}>(this->obj_, "{{.Name}}", "{{.Signature}}"{{range $index, $element := .ArgumentTypes}}, _{{$index}}{{end}});
+}
+{{end}}
+{{end}}
+
+{{range .Fields}}
+{{if .IsEnum}}
+{{ReplaceAll .Type "$" "_"}} {{ReplaceAll $.ClassName "$" "_"}}::get{{.Name | UpperCamelCase}}EnumField()
+{
+  return {{range $.NamespacePrefix}}{{.}}::{{end}}JNIHelper::getStaticField<{{ReplaceAll .Type "$" "_"}}>("{{$.PackageName}}/{{$.ClassName}}", "{{.Name}}", "{{.Signature}}");
+}
+{{else}}
+{{if .IsStatic}}
+{{if not .IsFinal}}
+void {{ReplaceAll $.ClassName "$" "_"}}::set{{.Name | UpperCamelCase}}StaticField({{if IsPrimitive .Type}}{{.Type}}{{else}}const {{ReplaceAll .Type "$" "_"}}&{{end}} x)
+{
+  {{range $.NamespacePrefix}}{{.}}::{{end}}JNIHelper::setStaticField("{{$.PackageName}}/{{$.ClassName}}", "{{.Name}}", "{{.Signature}}", x);
+}
+{{end}}
+{{ReplaceAll .Type "$" "_"}} {{ReplaceAll $.ClassName "$" "_"}}::get{{.Name | UpperCamelCase}}StaticField()
+{
+  return {{range $.NamespacePrefix}}{{.}}::{{end}}JNIHelper::getStaticField<{{ReplaceAll .Type "$" "_"}}>("{{$.PackageName}}/{{$.ClassName}}", "{{.Name}}", "{{.Signature}}");
+}
+{{else}}
+{{if not .IsFinal}}
+void {{ReplaceAll $.ClassName "$" "_"}}::set{{.Name | UpperCamelCase}}Field({{if IsPrimitive .Type}}{{.Type}}{{else}}const {{ReplaceAll .Type "$" "_"}}&{{end}} x)
+{
+  {{range $.NamespacePrefix}}{{.}}::{{end}}JNIHelper::setField(this->obj_, "{{.Name}}", "{{.Signature}}", x);
+}
+{{end}}
+{{ReplaceAll .Type "$" "_"}} {{ReplaceAll $.ClassName "$" "_"}}::get{{.Name | UpperCamelCase}}Field() const
+{
+  return {{range $.NamespacePrefix}}{{.}}::{{end}}JNIHelper::getField<{{ReplaceAll .Type "$" "_"}}>(this->obj_, "{{.Name}}", "{{.Signature}}");
+}
+{{end}}
+{{end}}
+{{end}}
+
+{{if not .SuperClass}}
+jobject {{ReplaceAll .ClassName "$" "_"}}::getJNIObjectHandle() const
+{
+  return this->obj_;
+}
+{{end}}
+
+{{if eq .FullName "java/lang/String"}}
+String::operator std::string() const
+{
+  auto env = JNIHelper::getJNIEnv();
+  auto str = reinterpret_cast<jstring>(this->obj_);
+  const auto bytes = env->GetStringUTFChars(str, nullptr);
+  std::string res{bytes,
+    static_cast<typename std::string::size_type>(env->GetStringUTFLength(str))};
+  env->ReleaseStringUTFChars(str, bytes);
+  return res;
+}
+{{end}}
+
+{{ReplaceAll .ClassName "$" "_"}}& {{ReplaceAll .ClassName "$" "_"}}::operator=({{ReplaceAll .ClassName "$" "_"}}&& rhs) noexcept
+{
+  {{if .SuperClass}}base_type::operator=(std::move(rhs));{{else}}this->obj_ = rhs.obj_;
+  rhs.obj_ = nullptr;{{end}}
+  return *this;
+}
+
+{{range (Split .PackageName "/" | Reverse)}}
+} // namespace {{.}}{{if IsReserved .}}_{{end}}
+{{end}}
+
+{{range (Reverse .NamespacePrefix)}}
+} // namespace {{.}}
+{{end}}

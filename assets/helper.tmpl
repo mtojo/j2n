@@ -1,0 +1,2049 @@
+#ifndef {{.IncGuardPrefix}}{{range .NamespacePrefix}}{{. | ToUpper}}_{{end}}COMMON_{{.HeaderExt | ToUpper}}{{.IncGuardSuffix}}
+#define {{.IncGuardPrefix}}{{range .NamespacePrefix}}{{. | ToUpper}}_{{end}}COMMON_{{.HeaderExt | ToUpper}}{{.IncGuardSuffix}}
+
+#include <memory>
+#include <stdexcept>
+#include <string>
+#include <type_traits>
+#include <utility>
+#include <vector>
+
+#include <jni.h>
+
+{{range .NamespacePrefix}}
+namespace {{.}}
+{
+{{end}}
+
+namespace JNIHelper
+{
+
+using ByteType = std::uint8_t;
+using CharType = char16_t;
+using DoubleType = double;
+using FloatType = float;
+using IntType = std::int32_t;
+using LongType = std::int64_t;
+using ShortType = std::int16_t;
+using VoidType = void;
+using BooleanType = bool;
+using StringType = std::string;
+template <class T>
+using ArrayType = std::vector<T>;
+
+namespace detail
+{
+
+inline JavaVM** JavaVMHolder()
+{
+  static JavaVM* jvm = nullptr;
+  return &jvm;
+}
+
+} // namespace detail
+
+inline JavaVM* setJavaVM(JavaVM* jvm)
+{
+  auto old = *detail::JavaVMHolder();
+  *detail::JavaVMHolder() = jvm;
+  return old;
+}
+
+inline JavaVM* getJavaVM()
+{
+  return *detail::JavaVMHolder();
+}
+
+inline JNIEnv* getJNIEnv()
+{
+  JNIEnv* env;
+  auto ret =
+    getJavaVM()->GetEnv(reinterpret_cast<void**>(&env), JNI_VERSION_1_4);
+
+  if (ret == JNI_EDETACHED)
+  {
+    if (getJavaVM()->AttachCurrentThread(&env, nullptr) == JNI_OK)
+    {
+      return env;
+    }
+  }
+  else if (ret == JNI_OK)
+  {
+    return env;
+  }
+
+  throw std::runtime_error{"JNIHelper::getJNIEnv"};
+}
+
+namespace detail
+{
+
+template <class T>
+struct LocalRefDeleter final
+{
+  using pointer = T*;
+
+  void operator()(pointer p) const
+  {
+    getJNIEnv()->DeleteLocalRef(p);
+  }
+};
+
+} // namespace detail
+
+template <class T>
+using LocalRef = std::unique_ptr<T, detail::LocalRefDeleter<T>>;
+
+namespace detail
+{
+
+template <class T>
+struct ValueHolder
+{
+  T data()
+  {
+    return this->value;
+  }
+
+  T value;
+};
+
+template <class T>
+struct ValueHolder<LocalRef<T>>
+{
+  T* data()
+  {
+    return this->value.get();
+  }
+
+  LocalRef<T> value;
+};
+
+template <class, class = void>
+struct JNITraits;
+
+template <>
+struct JNITraits<VoidType>
+{
+  using value_type = VoidType;
+
+  static std::string getSignature()
+  {
+    return "V";
+  }
+
+  template <class Arg>
+  static void toJavaValue(JNIEnv* env, Arg&& arg) = delete;
+
+  static void getArrayElements(JNIEnv* env, jarray ary) = delete;
+
+  template <class Arg>
+  static void setField(JNIEnv* env, jobject obj, jfieldID fieldID,
+                       Arg&& arg) = delete;
+
+  static void getField(JNIEnv* env, jobject obj, jfieldID fieldID) = delete;
+
+  template <class Arg>
+  static void setStaticField(JNIEnv* env, jclass classID, jfieldID fieldID,
+                             Arg&& arg) = delete;
+
+  static void getStaticField(JNIEnv* env, jclass classID,
+                             jfieldID fieldID) = delete;
+
+  template <class... Args>
+  static void callMethod(JNIEnv* env, jobject obj, jmethodID methodID,
+                         Args&&... args)
+  {
+    env->CallVoidMethod(obj, methodID,
+                        JNITraits<typename std::decay<Args>::type>::toJavaValue(
+                          env, std::forward<Args>(args)).data()...);
+  }
+
+  template <class... Args>
+  static void callStaticMethod(JNIEnv* env, jclass classID, jmethodID methodID,
+                               Args&&... args)
+  {
+    env->CallStaticVoidMethod(
+      classID, methodID,
+      JNITraits<typename std::decay<Args>::type>::toJavaValue(
+        env, std::forward<Args>(args)).data()...);
+  }
+};
+
+template <>
+struct JNITraits<BooleanType>
+{
+  using value_type = BooleanType;
+
+  static std::string getSignature()
+  {
+    return "Z";
+  }
+
+  template <class Arg>
+  static ValueHolder<jboolean> toJavaValue(JNIEnv* env, Arg&& arg)
+  {
+    return ValueHolder<jboolean>{static_cast<jboolean>(arg)};
+  }
+
+  static ArrayType<BooleanType> getArrayElements(JNIEnv* env, jbooleanArray ary)
+  {
+    const auto elems = env->GetBooleanArrayElements(ary, nullptr);
+    const auto len = env->GetArrayLength(ary);
+    ArrayType<BooleanType> res;
+    res.reserve(len);
+    for (jsize i = 0; i < len; ++i)
+    {
+      res.push_back(static_cast<BooleanType>(elems[i]));
+    }
+    return res;
+  }
+
+  template <class Arg>
+  static void setField(JNIEnv* env, jobject obj, jfieldID fieldID, Arg&& arg)
+  {
+    env->SetBooleanField(obj, fieldID, toJavaValue(env, arg).data());
+  }
+
+  static value_type getField(JNIEnv* env, jobject obj, jfieldID fieldID)
+  {
+    return static_cast<value_type>(env->GetBooleanField(obj, fieldID));
+  }
+
+  template <class Arg>
+  static void setStaticField(JNIEnv* env, jclass classID, jfieldID fieldID,
+                             Arg&& arg)
+  {
+    env->SetStaticBooleanField(classID, fieldID, toJavaValue(env, arg).data());
+  }
+
+  static value_type getStaticField(JNIEnv* env, jclass classID,
+                                   jfieldID fieldID)
+  {
+    return static_cast<value_type>(
+      env->GetStaticBooleanField(classID, fieldID));
+  }
+
+  template <class... Args>
+  static value_type callMethod(JNIEnv* env, jobject obj, jmethodID methodID,
+                               Args&&... args)
+  {
+    return static_cast<value_type>(env->CallBooleanMethod(
+      obj, methodID, JNITraits<typename std::decay<Args>::type>::toJavaValue(
+                       env, std::forward<Args>(args)).data()...));
+  }
+
+  template <class... Args>
+  static value_type callStaticMethod(JNIEnv* env, jclass classID,
+                                     jmethodID methodID, Args&&... args)
+  {
+    return static_cast<value_type>(env->CallBooleanMethod(
+      classID, methodID,
+      JNITraits<typename std::decay<Args>::type>::toJavaValue(
+        env, std::forward<Args>(args)).data()...));
+  }
+};
+
+template <>
+struct JNITraits<ByteType>
+{
+  using value_type = ByteType;
+
+  static std::string getSignature()
+  {
+    return "B";
+  }
+
+  template <class Arg>
+  static ValueHolder<jbyte> toJavaValue(JNIEnv* env, Arg&& arg)
+  {
+    return ValueHolder<jbyte>{static_cast<jbyte>(arg)};
+  }
+
+  static ArrayType<ByteType> getArrayElements(JNIEnv* env, jbyteArray ary)
+  {
+    const auto elems = env->GetByteArrayElements(ary, nullptr);
+    const auto len = env->GetArrayLength(ary);
+    ArrayType<ByteType> res;
+    res.reserve(len);
+    for (jsize i = 0; i < len; ++i)
+    {
+      res.push_back(static_cast<ByteType>(elems[i]));
+    }
+    return res;
+  }
+
+  template <class Arg>
+  static void setField(JNIEnv* env, jobject obj, jfieldID fieldID, Arg&& arg)
+  {
+    env->SetByteField(obj, fieldID, toJavaValue(env, arg).data());
+  }
+
+  static value_type getField(JNIEnv* env, jobject obj, jfieldID fieldID)
+  {
+    return static_cast<value_type>(env->GetByteField(obj, fieldID));
+  }
+
+  template <class Arg>
+  static void setStaticField(JNIEnv* env, jclass classID, jfieldID fieldID,
+                             Arg&& arg)
+  {
+    env->SetStaticByteField(classID, fieldID, toJavaValue(env, arg).data());
+  }
+
+  static value_type getStaticField(JNIEnv* env, jclass classID,
+                                   jfieldID fieldID)
+  {
+    return static_cast<value_type>(env->GetStaticByteField(classID, fieldID));
+  }
+
+  template <class... Args>
+  static value_type callMethod(JNIEnv* env, jobject obj, jmethodID methodID,
+                               Args&&... args)
+  {
+    return static_cast<value_type>(env->CallByteMethod(
+      obj, methodID, JNITraits<typename std::decay<Args>::type>::toJavaValue(
+                       env, std::forward<Args>(args)).data()...));
+  }
+
+  template <class... Args>
+  static value_type callStaticMethod(JNIEnv* env, jclass classID,
+                                     jmethodID methodID, Args&&... args)
+  {
+    return static_cast<value_type>(env->CallByteMethod(
+      classID, methodID,
+      JNITraits<typename std::decay<Args>::type>::toJavaValue(
+        env, std::forward<Args>(args)).data()...));
+  }
+};
+
+template <>
+struct JNITraits<CharType>
+{
+  using value_type = CharType;
+
+  static std::string getSignature()
+  {
+    return "C";
+  }
+
+  template <class Arg>
+  static ValueHolder<jchar> toJavaValue(JNIEnv* env, Arg&& arg)
+  {
+    return ValueHolder<jchar>{static_cast<jchar>(arg)};
+  }
+
+  static ArrayType<CharType> getArrayElements(JNIEnv* env, jcharArray ary)
+  {
+    const auto elems = env->GetCharArrayElements(ary, nullptr);
+    const auto len = env->GetArrayLength(ary);
+    ArrayType<CharType> res;
+    res.reserve(len);
+    for (jsize i = 0; i < len; ++i)
+    {
+      res.push_back(static_cast<CharType>(elems[i]));
+    }
+    return res;
+  }
+
+  template <class Arg>
+  static void setField(JNIEnv* env, jobject obj, jfieldID fieldID, Arg&& arg)
+  {
+    env->SetCharField(obj, fieldID, toJavaValue(env, arg).data());
+  }
+
+  static value_type getField(JNIEnv* env, jobject obj, jfieldID fieldID)
+  {
+    return static_cast<value_type>(env->GetCharField(obj, fieldID));
+  }
+
+  template <class Arg>
+  static void setStaticField(JNIEnv* env, jclass classID, jfieldID fieldID,
+                             Arg&& arg)
+  {
+    env->SetStaticCharField(classID, fieldID, toJavaValue(env, arg).data());
+  }
+
+  static value_type getStaticField(JNIEnv* env, jclass classID,
+                                   jfieldID fieldID)
+  {
+    return static_cast<value_type>(env->GetStaticCharField(classID, fieldID));
+  }
+
+  template <class... Args>
+  static value_type callMethod(JNIEnv* env, jobject obj, jmethodID methodID,
+                               Args&&... args)
+  {
+    return static_cast<value_type>(env->CallCharMethod(
+      obj, methodID, JNITraits<typename std::decay<Args>::type>::toJavaValue(
+                       env, std::forward<Args>(args)).data()...));
+  }
+
+  template <class... Args>
+  static value_type callStaticMethod(JNIEnv* env, jclass classID,
+                                     jmethodID methodID, Args&&... args)
+  {
+    return static_cast<value_type>(env->CallCharMethod(
+      classID, methodID,
+      JNITraits<typename std::decay<Args>::type>::toJavaValue(
+        env, std::forward<Args>(args)).data()...));
+  }
+};
+
+template <>
+struct JNITraits<ShortType>
+{
+  using value_type = ShortType;
+
+  static std::string getSignature()
+  {
+    return "S";
+  }
+
+  template <class Arg>
+  static ValueHolder<jshort> toJavaValue(JNIEnv* env, Arg&& arg)
+  {
+    return ValueHolder<jshort>{static_cast<jshort>(arg)};
+  }
+
+  static ArrayType<ShortType> getArrayElements(JNIEnv* env, jshortArray ary)
+  {
+    const auto elems = env->GetShortArrayElements(ary, nullptr);
+    const auto len = env->GetArrayLength(ary);
+    ArrayType<ShortType> res;
+    res.reserve(len);
+    for (jsize i = 0; i < len; ++i)
+    {
+      res.push_back(static_cast<ShortType>(elems[i]));
+    }
+    return res;
+  }
+
+  template <class Arg>
+  static void setField(JNIEnv* env, jobject obj, jfieldID fieldID, Arg&& arg)
+  {
+    env->SetShortField(obj, fieldID, toJavaValue(env, arg).data());
+  }
+
+  static value_type getField(JNIEnv* env, jobject obj, jfieldID fieldID)
+  {
+    return static_cast<value_type>(env->GetShortField(obj, fieldID));
+  }
+
+  template <class Arg>
+  static void setStaticField(JNIEnv* env, jclass classID, jfieldID fieldID,
+                             Arg&& arg)
+  {
+    env->SetStaticShortField(classID, fieldID, toJavaValue(env, arg).data());
+  }
+
+  static value_type getStaticField(JNIEnv* env, jclass classID,
+                                   jfieldID fieldID)
+  {
+    return static_cast<value_type>(env->GetStaticShortField(classID, fieldID));
+  }
+
+  template <class... Args>
+  static value_type callMethod(JNIEnv* env, jobject obj, jmethodID methodID,
+                               Args&&... args)
+  {
+    return static_cast<value_type>(env->CallShortMethod(
+      obj, methodID, JNITraits<typename std::decay<Args>::type>::toJavaValue(
+                       env, std::forward<Args>(args)).data()...));
+  }
+
+  template <class... Args>
+  static value_type callStaticMethod(JNIEnv* env, jclass classID,
+                                     jmethodID methodID, Args&&... args)
+  {
+    return static_cast<value_type>(env->CallShortMethod(
+      classID, methodID,
+      JNITraits<typename std::decay<Args>::type>::toJavaValue(
+        env, std::forward<Args>(args)).data()...));
+  }
+};
+
+template <>
+struct JNITraits<IntType>
+{
+  using value_type = IntType;
+
+  static std::string getSignature()
+  {
+    return "I";
+  }
+
+  template <class Arg>
+  static ValueHolder<jint> toJavaValue(JNIEnv* env, Arg&& arg)
+  {
+    return ValueHolder<jint>{static_cast<jint>(arg)};
+  }
+
+  static ArrayType<IntType> getArrayElements(JNIEnv* env, jintArray ary)
+  {
+    const auto elems = env->GetIntArrayElements(ary, nullptr);
+    const auto len = env->GetArrayLength(ary);
+    ArrayType<IntType> res;
+    res.reserve(len);
+    for (jsize i = 0; i < len; ++i)
+    {
+      res.push_back(static_cast<IntType>(elems[i]));
+    }
+    return res;
+  }
+
+  template <class Arg>
+  static void setField(JNIEnv* env, jobject obj, jfieldID fieldID, Arg&& arg)
+  {
+    env->SetIntField(obj, fieldID, toJavaValue(env, arg).data());
+  }
+
+  static value_type getField(JNIEnv* env, jobject obj, jfieldID fieldID)
+  {
+    return static_cast<value_type>(env->GetIntField(obj, fieldID));
+  }
+
+  template <class Arg>
+  static void setStaticField(JNIEnv* env, jclass classID, jfieldID fieldID,
+                             Arg&& arg)
+  {
+    env->SetStaticIntField(classID, fieldID, toJavaValue(env, arg).data());
+  }
+
+  static value_type getStaticField(JNIEnv* env, jclass classID,
+                                   jfieldID fieldID)
+  {
+    return static_cast<value_type>(env->GetStaticIntField(classID, fieldID));
+  }
+
+  template <class... Args>
+  static value_type callMethod(JNIEnv* env, jobject obj, jmethodID methodID,
+                               Args&&... args)
+  {
+    return static_cast<value_type>(env->CallIntMethod(
+      obj, methodID, JNITraits<typename std::decay<Args>::type>::toJavaValue(
+                       env, std::forward<Args>(args)).data()...));
+  }
+
+  template <class... Args>
+  static value_type callStaticMethod(JNIEnv* env, jclass classID,
+                                     jmethodID methodID, Args&&... args)
+  {
+    return static_cast<value_type>(env->CallIntMethod(
+      classID, methodID,
+      JNITraits<typename std::decay<Args>::type>::toJavaValue(
+        env, std::forward<Args>(args)).data()...));
+  }
+};
+
+template <>
+struct JNITraits<LongType>
+{
+  using value_type = LongType;
+
+  static std::string getSignature()
+  {
+    return "J";
+  }
+
+  template <class Arg>
+  static ValueHolder<jlong> toJavaValue(JNIEnv* env, Arg&& arg)
+  {
+    return ValueHolder<jlong>{static_cast<jlong>(arg)};
+  }
+
+  static ArrayType<LongType> getArrayElements(JNIEnv* env, jlongArray ary)
+  {
+    const auto elems = env->GetLongArrayElements(ary, nullptr);
+    const auto len = env->GetArrayLength(ary);
+    ArrayType<LongType> res;
+    res.reserve(len);
+    for (jsize i = 0; i < len; ++i)
+    {
+      res.push_back(static_cast<LongType>(elems[i]));
+    }
+    return res;
+  }
+
+  template <class Arg>
+  static void setField(JNIEnv* env, jobject obj, jfieldID fieldID, Arg&& arg)
+  {
+    env->SetLongField(obj, fieldID, toJavaValue(env, arg).data());
+  }
+
+  static value_type getField(JNIEnv* env, jobject obj, jfieldID fieldID)
+  {
+    return static_cast<value_type>(env->GetLongField(obj, fieldID));
+  }
+
+  template <class Arg>
+  static void setStaticField(JNIEnv* env, jclass classID, jfieldID fieldID,
+                             Arg&& arg)
+  {
+    env->SetStaticLongField(classID, fieldID, toJavaValue(env, arg).data());
+  }
+
+  static value_type getStaticField(JNIEnv* env, jclass classID,
+                                   jfieldID fieldID)
+  {
+    return static_cast<value_type>(env->GetStaticLongField(classID, fieldID));
+  }
+
+  template <class... Args>
+  static value_type callMethod(JNIEnv* env, jobject obj, jmethodID methodID,
+                               Args&&... args)
+  {
+    return static_cast<value_type>(env->CallLongMethod(
+      obj, methodID, JNITraits<typename std::decay<Args>::type>::toJavaValue(
+                       env, std::forward<Args>(args)).data()...));
+  }
+
+  template <class... Args>
+  static value_type callStaticMethod(JNIEnv* env, jclass classID,
+                                     jmethodID methodID, Args&&... args)
+  {
+    return static_cast<value_type>(env->CallLongMethod(
+      classID, methodID,
+      JNITraits<typename std::decay<Args>::type>::toJavaValue(
+        env, std::forward<Args>(args)).data()...));
+  }
+};
+
+template <>
+struct JNITraits<FloatType>
+{
+  using value_type = FloatType;
+
+  static std::string getSignature()
+  {
+    return "F";
+  }
+
+  template <class Arg>
+  static ValueHolder<jfloat> toJavaValue(JNIEnv* env, Arg&& arg)
+  {
+    return ValueHolder<jfloat>{static_cast<jfloat>(arg)};
+  }
+
+  static ArrayType<FloatType> getArrayElements(JNIEnv* env, jfloatArray ary)
+  {
+    const auto elems = env->GetFloatArrayElements(ary, nullptr);
+    const auto len = env->GetArrayLength(ary);
+    ArrayType<FloatType> res;
+    res.reserve(len);
+    for (jsize i = 0; i < len; ++i)
+    {
+      res.push_back(static_cast<FloatType>(elems[i]));
+    }
+    return res;
+  }
+
+  template <class Arg>
+  static void setField(JNIEnv* env, jobject obj, jfieldID fieldID, Arg&& arg)
+  {
+    env->SetFloatField(obj, fieldID, toJavaValue(env, arg).data());
+  }
+
+  static value_type getField(JNIEnv* env, jobject obj, jfieldID fieldID)
+  {
+    return static_cast<value_type>(env->GetFloatField(obj, fieldID));
+  }
+
+  template <class Arg>
+  static void setStaticField(JNIEnv* env, jclass classID, jfieldID fieldID,
+                             Arg&& arg)
+  {
+    env->SetStaticFloatField(classID, fieldID, toJavaValue(env, arg).data());
+  }
+
+  static value_type getStaticField(JNIEnv* env, jclass classID,
+                                   jfieldID fieldID)
+  {
+    return static_cast<value_type>(env->GetStaticFloatField(classID, fieldID));
+  }
+
+  template <class... Args>
+  static value_type callMethod(JNIEnv* env, jobject obj, jmethodID methodID,
+                               Args&&... args)
+  {
+    return static_cast<value_type>(env->CallFloatMethod(
+      obj, methodID, JNITraits<typename std::decay<Args>::type>::toJavaValue(
+                       env, std::forward<Args>(args)).data()...));
+  }
+
+  template <class... Args>
+  static value_type callStaticMethod(JNIEnv* env, jclass classID,
+                                     jmethodID methodID, Args&&... args)
+  {
+    return static_cast<value_type>(env->CallFloatMethod(
+      classID, methodID,
+      JNITraits<typename std::decay<Args>::type>::toJavaValue(
+        env, std::forward<Args>(args)).data()...));
+  }
+};
+
+template <>
+struct JNITraits<DoubleType>
+{
+  using value_type = DoubleType;
+
+  static std::string getSignature()
+  {
+    return "D";
+  }
+
+  template <class Arg>
+  static ValueHolder<jdouble> toJavaValue(JNIEnv* env, Arg&& arg)
+  {
+    return ValueHolder<jdouble>{static_cast<jdouble>(arg)};
+  }
+
+  static ArrayType<DoubleType> getArrayElements(JNIEnv* env, jdoubleArray ary)
+  {
+    const auto elems = env->GetDoubleArrayElements(ary, nullptr);
+    const auto len = env->GetArrayLength(ary);
+    ArrayType<DoubleType> res;
+    res.reserve(len);
+    for (jsize i = 0; i < len; ++i)
+    {
+      res.push_back(static_cast<DoubleType>(elems[i]));
+    }
+    return res;
+  }
+
+  template <class Arg>
+  static void setField(JNIEnv* env, jobject obj, jfieldID fieldID, Arg&& arg)
+  {
+    env->SetDoubleField(obj, fieldID, toJavaValue(env, arg).data());
+  }
+
+  static value_type getField(JNIEnv* env, jobject obj, jfieldID fieldID)
+  {
+    return static_cast<value_type>(env->GetDoubleField(obj, fieldID));
+  }
+
+  template <class Arg>
+  static void setStaticField(JNIEnv* env, jclass classID, jfieldID fieldID,
+                             Arg&& arg)
+  {
+    env->SetStaticDoubleField(classID, fieldID, toJavaValue(env, arg).data());
+  }
+
+  static value_type getStaticField(JNIEnv* env, jclass classID,
+                                   jfieldID fieldID)
+  {
+    return static_cast<value_type>(env->GetStaticDoubleField(classID, fieldID));
+  }
+
+  template <class... Args>
+  static value_type callMethod(JNIEnv* env, jobject obj, jmethodID methodID,
+                               Args&&... args)
+  {
+    return static_cast<value_type>(env->CallDoubleMethod(
+      obj, methodID, JNITraits<typename std::decay<Args>::type>::toJavaValue(
+                       env, std::forward<Args>(args)).data()...));
+  }
+
+  template <class... Args>
+  static value_type callStaticMethod(JNIEnv* env, jclass classID,
+                                     jmethodID methodID, Args&&... args)
+  {
+    return static_cast<value_type>(env->CallDoubleMethod(
+      classID, methodID,
+      JNITraits<typename std::decay<Args>::type>::toJavaValue(
+        env, std::forward<Args>(args)).data()...));
+  }
+};
+
+template <>
+struct JNITraits<StringType>
+{
+  using value_type = StringType;
+
+  static std::string getSignature()
+  {
+    return "Ljava/lang/String;";
+  }
+
+  template <class Arg>
+  static ValueHolder<LocalRef<_jstring>> toJavaValue(JNIEnv* env, Arg&& arg)
+  {
+    LocalRef<_jclass> c{env->FindClass("java/lang/String")};
+    LocalRef<_jbyteArray> bytes{env->NewByteArray(arg.size())};
+    env->SetByteArrayRegion(bytes.get(), 0, arg.size(),
+                            reinterpret_cast<const jbyte*>(arg.data()));
+    LocalRef<_jstring> encoding{env->NewStringUTF("UTF-8")};
+    return ValueHolder<LocalRef<_jstring>>{
+      LocalRef<_jstring>{reinterpret_cast<jstring>(env->NewObject(
+        c.get(), env->GetMethodID(c.get(), "<init>", "([BLjava/lang/String;)V"),
+        bytes.get(), encoding.get()))}};
+  }
+
+  static ArrayType<StringType> getArrayElements(JNIEnv* env, jobjectArray ary)
+  {
+    const auto len = env->GetArrayLength(ary);
+    ArrayType<StringType> res;
+    res.reserve(len);
+    for (jsize i = 0; i < len; ++i)
+    {
+      LocalRef<_jstring> str{
+        static_cast<jstring>(env->GetObjectArrayElement(ary, i))};
+      const auto bytes = env->GetStringUTFChars(str.get(), nullptr);
+      res.emplace_back(bytes);
+      env->ReleaseStringUTFChars(str.get(), bytes);
+    }
+    return res;
+  }
+
+  template <class Arg>
+  static void setField(JNIEnv* env, jobject obj, jfieldID fieldID, Arg&& arg)
+  {
+    env->SetObjectField(obj, fieldID, toJavaValue(env, arg).data());
+  }
+
+  static value_type getField(JNIEnv* env, jobject obj, jfieldID fieldID)
+  {
+    LocalRef<_jstring> str{
+      static_cast<jstring>(env->GetObjectField(obj, fieldID))};
+    const auto bytes = env->GetStringUTFChars(str.get(), nullptr);
+    value_type res{bytes};
+    env->ReleaseStringUTFChars(str.get(), bytes);
+    return res;
+  }
+
+  template <class Arg>
+  static void setStaticField(JNIEnv* env, jclass classID, jfieldID fieldID,
+                             Arg&& arg)
+  {
+    env->SetStaticObjectField(classID, fieldID, toJavaValue(env, arg).data());
+  }
+
+  static value_type getStaticField(JNIEnv* env, jclass classID,
+                                   jfieldID fieldID)
+  {
+    LocalRef<_jstring> str{
+      static_cast<jstring>(env->GetStaticObjectField(classID, fieldID))};
+    const auto bytes = env->GetStringUTFChars(str.get(), nullptr);
+    value_type res{bytes};
+    env->ReleaseStringUTFChars(str.get(), bytes);
+    return res;
+  }
+
+  template <class... Args>
+  static value_type callMethod(JNIEnv* env, jobject obj, jmethodID methodID,
+                               Args&&... args)
+  {
+    LocalRef<_jstring> str{static_cast<jstring>(env->CallObjectMethod(
+      obj, methodID, JNITraits<typename std::decay<Args>::type>::toJavaValue(
+                       env, std::forward<Args>(args)).data()...))};
+    const auto bytes = env->GetStringUTFChars(str.get(), nullptr);
+    value_type res{bytes};
+    env->ReleaseStringUTFChars(str.get(), bytes);
+    return res;
+  }
+
+  template <class... Args>
+  static value_type callStaticMethod(JNIEnv* env, jclass classID,
+                                     jmethodID methodID, Args&&... args)
+  {
+    LocalRef<_jstring> str{static_cast<jstring>(env->CallStaticObjectMethod(
+      classID, methodID,
+      JNITraits<typename std::decay<Args>::type>::toJavaValue(
+        env, std::forward<Args>(args)).data()...))};
+    const auto bytes = env->GetStringUTFChars(str.get(), nullptr);
+    value_type res{bytes};
+    env->ReleaseStringUTFChars(str.get(), bytes);
+    return res;
+  }
+};
+
+template <class T>
+struct JNITraits<
+  T,
+  typename std::enable_if<std::is_same<
+    decltype(std::declval<T&>().getJNIObjectHandle()), jobject>::value>::type>
+{
+  using value_type = T;
+
+  static std::string getSignature()
+  {
+    return T::getJNIClassName();
+  }
+
+  static ValueHolder<jobject> toJavaValue(JNIEnv* env, const T& arg)
+  {
+    return ValueHolder<jobject>{arg.getJNIObjectHandle()};
+  }
+
+  static ArrayType<T> getArrayElements(JNIEnv* env, jobjectArray ary)
+  {
+    const auto len = env->GetArrayLength(ary);
+    ArrayType<T> res;
+    res.reserve(len);
+    for (jsize i = 0; i < len; ++i)
+    {
+      LocalRef<_jobject> elem{env->GetObjectArrayElement(ary, i)};
+      res.emplace_back(elem.get());
+    }
+    return res;
+  }
+
+  template <class Arg>
+  static void setField(JNIEnv* env, jobject obj, jfieldID fieldID, Arg&& arg)
+  {
+    env->SetObjectField(obj, fieldID, toJavaValue(env, arg).data());
+  }
+
+  static value_type getField(JNIEnv* env, jobject obj, jfieldID fieldID)
+  {
+    LocalRef<_jobject> ref{env->GetObjectField(obj, fieldID)};
+    return T{ref.get()};
+  }
+
+  template <class Arg>
+  static void setStaticField(JNIEnv* env, jclass classID, jfieldID fieldID,
+                             Arg&& arg)
+  {
+    env->SetStaticObjectField(classID, fieldID, toJavaValue(env, arg).data());
+  }
+
+  static value_type getStaticField(JNIEnv* env, jclass classID,
+                                   jfieldID fieldID)
+  {
+    LocalRef<_jobject> ref{env->GetStaticObjectField(classID, fieldID)};
+    return T{ref.get()};
+  }
+
+  template <class... Args>
+  static value_type callMethod(JNIEnv* env, jobject obj, jmethodID methodID,
+                               Args&&... args)
+  {
+    LocalRef<_jobject> ref{env->CallObjectMethod(
+      obj, methodID, JNITraits<typename std::decay<Args>::type>::toJavaValue(
+                       env, std::forward<Args>(args)).data()...)};
+    return T{ref.get()};
+  }
+
+  template <class... Args>
+  static value_type callStaticMethod(JNIEnv* env, jclass classID,
+                                     jmethodID methodID, Args&&... args)
+  {
+    LocalRef<_jobject> ref{env->CallStaticObjectMethod(
+      classID, methodID,
+      JNITraits<typename std::decay<Args>::type>::toJavaValue(
+        env, std::forward<Args>(args)).data()...)};
+    return T{ref.get()};
+  }
+};
+
+template <>
+struct JNITraits<ArrayType<BooleanType>>
+{
+  using value_type = ArrayType<BooleanType>;
+
+  static std::string getSignature()
+  {
+    return "[Z";
+  }
+
+  template <class Arg>
+  static ValueHolder<LocalRef<_jbooleanArray>> toJavaValue(JNIEnv* env,
+                                                           Arg&& arg)
+  {
+    auto ary = env->NewBooleanArray(arg.size());
+    for (jsize i = 0; i < static_cast<jsize>(arg.size()); ++i)
+    {
+      auto b = static_cast<jboolean>(arg[i]);
+      env->SetBooleanArrayRegion(ary, i, 1, &b);
+    }
+    return ValueHolder<LocalRef<_jbooleanArray>>{LocalRef<_jbooleanArray>{ary}};
+  }
+
+  static ArrayType<ArrayType<BooleanType>> getArrayElements(JNIEnv* env,
+                                                            jobjectArray ary)
+  {
+    const auto len = env->GetArrayLength(ary);
+    ArrayType<ArrayType<BooleanType>> res;
+    res.reserve(len);
+    for (jsize i = 0; i < len; ++i)
+    {
+      LocalRef<_jbooleanArray> a{
+        static_cast<jbooleanArray>(env->GetObjectArrayElement(ary, i))};
+      res.emplace_back(
+        std::move(JNITraits<BooleanType>::getArrayElements(env, a.get())));
+    }
+    return res;
+  }
+
+  template <class Arg>
+  static void setField(JNIEnv* env, jobject obj, jfieldID fieldID, Arg&& arg)
+  {
+    env->SetObjectField(obj, fieldID, toJavaValue(env, arg).data());
+  }
+
+  static value_type getField(JNIEnv* env, jobject obj, jfieldID fieldID)
+  {
+    LocalRef<_jbooleanArray> ary{
+      static_cast<jbooleanArray>(env->GetObjectField(obj, fieldID))};
+    return JNITraits<BooleanType>::getArrayElements(env, ary.get());
+  }
+
+  template <class Arg>
+  static void setStaticField(JNIEnv* env, jclass classID, jfieldID fieldID,
+                             Arg&& arg)
+  {
+    env->SetStaticObjectField(classID, fieldID, toJavaValue(env, arg).data());
+  }
+
+  static value_type getStaticField(JNIEnv* env, jclass classID,
+                                   jfieldID fieldID)
+  {
+    LocalRef<_jbooleanArray> ary{
+      static_cast<jbooleanArray>(env->GetStaticObjectField(classID, fieldID))};
+    return JNITraits<BooleanType>::getArrayElements(env, ary.get());
+  }
+
+  template <class... Args>
+  static value_type callMethod(JNIEnv* env, jobject obj, jmethodID methodID,
+                               Args&&... args)
+  {
+    LocalRef<_jbooleanArray> ary{
+      static_cast<jbooleanArray>(env->CallObjectMethod(
+        obj, methodID, JNITraits<typename std::decay<Args>::type>::toJavaValue(
+                         env, std::forward<Args>(args)).data()...))};
+    return JNITraits<BooleanType>::getArrayElements(env, ary.get());
+  }
+
+  template <class... Args>
+  static value_type callStaticMethod(JNIEnv* env, jclass classID,
+                                     jmethodID methodID, Args&&... args)
+  {
+    LocalRef<_jbooleanArray> ary{
+      static_cast<jbooleanArray>(env->CallStaticObjectMethod(
+        classID, methodID,
+        JNITraits<typename std::decay<Args>::type>::toJavaValue(
+          env, std::forward<Args>(args)).data()...))};
+    return JNITraits<BooleanType>::getArrayElements(env, ary.get());
+  }
+};
+
+template <>
+struct JNITraits<ArrayType<ByteType>>
+{
+  using value_type = ArrayType<ByteType>;
+
+  static std::string getSignature()
+  {
+    return "[B";
+  }
+
+  template <class Arg>
+  static ValueHolder<LocalRef<_jbyteArray>> toJavaValue(JNIEnv* env, Arg&& arg)
+  {
+    auto ary = env->NewByteArray(arg.size());
+    env->SetByteArrayRegion(ary, 0, arg.size(),
+                            reinterpret_cast<const jbyte*>(arg.data()));
+    return ValueHolder<LocalRef<_jbyteArray>>{LocalRef<_jbyteArray>{ary}};
+  }
+
+  static ArrayType<ArrayType<ByteType>> getArrayElements(JNIEnv* env,
+                                                         jobjectArray ary)
+  {
+    const auto len = env->GetArrayLength(ary);
+    ArrayType<ArrayType<ByteType>> res;
+    res.reserve(len);
+    for (jsize i = 0; i < len; ++i)
+    {
+      LocalRef<_jbyteArray> a{
+        static_cast<jbyteArray>(env->GetObjectArrayElement(ary, i))};
+      res.emplace_back(
+        std::move(JNITraits<ByteType>::getArrayElements(env, a.get())));
+    }
+    return res;
+  }
+
+  template <class Arg>
+  static void setField(JNIEnv* env, jobject obj, jfieldID fieldID, Arg&& arg)
+  {
+    env->SetObjectField(obj, fieldID, toJavaValue(env, arg).data());
+  }
+
+  static value_type getField(JNIEnv* env, jobject obj, jfieldID fieldID)
+  {
+    LocalRef<_jbyteArray> ary{
+      static_cast<jbyteArray>(env->GetObjectField(obj, fieldID))};
+    return JNITraits<ByteType>::getArrayElements(env, ary.get());
+  }
+
+  template <class Arg>
+  static void setStaticField(JNIEnv* env, jclass classID, jfieldID fieldID,
+                             Arg&& arg)
+  {
+    env->SetStaticObjectField(classID, fieldID, toJavaValue(env, arg).data());
+  }
+
+  static value_type getStaticField(JNIEnv* env, jclass classID,
+                                   jfieldID fieldID)
+  {
+    LocalRef<_jbyteArray> ary{
+      static_cast<jbyteArray>(env->GetStaticObjectField(classID, fieldID))};
+    return JNITraits<ByteType>::getArrayElements(env, ary.get());
+  }
+
+  template <class... Args>
+  static value_type callMethod(JNIEnv* env, jobject obj, jmethodID methodID,
+                               Args&&... args)
+  {
+    LocalRef<_jbyteArray> ary{static_cast<jbyteArray>(env->CallObjectMethod(
+      obj, methodID, JNITraits<typename std::decay<Args>::type>::toJavaValue(
+                       env, std::forward<Args>(args)).data()...))};
+    return JNITraits<ByteType>::getArrayElements(env, ary.get());
+  }
+
+  template <class... Args>
+  static value_type callStaticMethod(JNIEnv* env, jclass classID,
+                                     jmethodID methodID, Args&&... args)
+  {
+    LocalRef<_jbyteArray> ary{
+      static_cast<jbyteArray>(env->CallStaticObjectMethod(
+        classID, methodID,
+        JNITraits<typename std::decay<Args>::type>::toJavaValue(
+          env, std::forward<Args>(args)).data()...))};
+    return JNITraits<ByteType>::getArrayElements(env, ary.get());
+  }
+};
+
+template <>
+struct JNITraits<ArrayType<CharType>>
+{
+  using value_type = ArrayType<CharType>;
+
+  static std::string getSignature()
+  {
+    return "[C";
+  }
+
+  template <class Arg>
+  static ValueHolder<LocalRef<_jcharArray>> toJavaValue(JNIEnv* env, Arg&& arg)
+  {
+    auto ary = env->NewCharArray(arg.size());
+    env->SetCharArrayRegion(ary, 0, arg.size(),
+                            reinterpret_cast<const jchar*>(arg.data()));
+    return ValueHolder<LocalRef<_jcharArray>>{LocalRef<_jcharArray>{ary}};
+  }
+
+  static ArrayType<ArrayType<CharType>> getArrayElements(JNIEnv* env,
+                                                         jobjectArray ary)
+  {
+    const auto len = env->GetArrayLength(ary);
+    ArrayType<ArrayType<CharType>> res;
+    res.reserve(len);
+    for (jsize i = 0; i < len; ++i)
+    {
+      LocalRef<_jcharArray> a{
+        static_cast<jcharArray>(env->GetObjectArrayElement(ary, i))};
+      res.emplace_back(
+        std::move(JNITraits<CharType>::getArrayElements(env, a.get())));
+    }
+    return res;
+  }
+
+  template <class Arg>
+  static void setField(JNIEnv* env, jobject obj, jfieldID fieldID, Arg&& arg)
+  {
+    env->SetObjectField(obj, fieldID, toJavaValue(env, arg).data());
+  }
+
+  static value_type getField(JNIEnv* env, jobject obj, jfieldID fieldID)
+  {
+    LocalRef<_jcharArray> ary{
+      static_cast<jcharArray>(env->GetObjectField(obj, fieldID))};
+    return JNITraits<CharType>::getArrayElements(env, ary.get());
+  }
+
+  template <class Arg>
+  static void setStaticField(JNIEnv* env, jclass classID, jfieldID fieldID,
+                             Arg&& arg)
+  {
+    env->SetStaticObjectField(classID, fieldID, toJavaValue(env, arg).data());
+  }
+
+  static value_type getStaticField(JNIEnv* env, jclass classID,
+                                   jfieldID fieldID)
+  {
+    LocalRef<_jcharArray> ary{
+      static_cast<jcharArray>(env->GetStaticObjectField(classID, fieldID))};
+    return JNITraits<CharType>::getArrayElements(env, ary.get());
+  }
+
+  template <class... Args>
+  static value_type callMethod(JNIEnv* env, jobject obj, jmethodID methodID,
+                               Args&&... args)
+  {
+    LocalRef<_jcharArray> ary{static_cast<jcharArray>(env->CallObjectMethod(
+      obj, methodID, JNITraits<typename std::decay<Args>::type>::toJavaValue(
+                       env, std::forward<Args>(args)).data()...))};
+    return JNITraits<CharType>::getArrayElements(env, ary.get());
+  }
+
+  template <class... Args>
+  static value_type callStaticMethod(JNIEnv* env, jclass classID,
+                                     jmethodID methodID, Args&&... args)
+  {
+    LocalRef<_jcharArray> ary{
+      static_cast<jcharArray>(env->CallStaticObjectMethod(
+        classID, methodID,
+        JNITraits<typename std::decay<Args>::type>::toJavaValue(
+          env, std::forward<Args>(args)).data()...))};
+    return JNITraits<CharType>::getArrayElements(env, ary.get());
+  }
+};
+
+template <>
+struct JNITraits<ArrayType<ShortType>>
+{
+  using value_type = ArrayType<ShortType>;
+
+  static std::string getSignature()
+  {
+    return "[S";
+  }
+
+  template <class Arg>
+  static ValueHolder<LocalRef<_jshortArray>> toJavaValue(JNIEnv* env, Arg&& arg)
+  {
+    auto ary = env->NewShortArray(arg.size());
+    env->SetShortArrayRegion(ary, 0, arg.size(),
+                             reinterpret_cast<const jshort*>(arg.data()));
+    return ValueHolder<LocalRef<_jshortArray>>{LocalRef<_jshortArray>{ary}};
+  }
+
+  static ArrayType<ArrayType<ShortType>> getArrayElements(JNIEnv* env,
+                                                          jobjectArray ary)
+  {
+    const auto len = env->GetArrayLength(ary);
+    ArrayType<ArrayType<ShortType>> res;
+    res.reserve(len);
+    for (jsize i = 0; i < len; ++i)
+    {
+      LocalRef<_jshortArray> a{
+        static_cast<jshortArray>(env->GetObjectArrayElement(ary, i))};
+      res.emplace_back(
+        std::move(JNITraits<ShortType>::getArrayElements(env, a.get())));
+    }
+    return res;
+  }
+
+  template <class Arg>
+  static void setField(JNIEnv* env, jobject obj, jfieldID fieldID, Arg&& arg)
+  {
+    env->SetObjectField(obj, fieldID, toJavaValue(env, arg).data());
+  }
+
+  static value_type getField(JNIEnv* env, jobject obj, jfieldID fieldID)
+  {
+    LocalRef<_jshortArray> ary{
+      static_cast<jshortArray>(env->GetObjectField(obj, fieldID))};
+    return JNITraits<ShortType>::getArrayElements(env, ary.get());
+  }
+
+  template <class Arg>
+  static void setStaticField(JNIEnv* env, jclass classID, jfieldID fieldID,
+                             Arg&& arg)
+  {
+    env->SetStaticObjectField(classID, fieldID, toJavaValue(env, arg).data());
+  }
+
+  static value_type getStaticField(JNIEnv* env, jclass classID,
+                                   jfieldID fieldID)
+  {
+    LocalRef<_jshortArray> ary{
+      static_cast<jshortArray>(env->GetStaticObjectField(classID, fieldID))};
+    return JNITraits<ShortType>::getArrayElements(env, ary.get());
+  }
+
+  template <class... Args>
+  static value_type callMethod(JNIEnv* env, jobject obj, jmethodID methodID,
+                               Args&&... args)
+  {
+    LocalRef<_jshortArray> ary{static_cast<jshortArray>(env->CallObjectMethod(
+      obj, methodID, JNITraits<typename std::decay<Args>::type>::toJavaValue(
+                       env, std::forward<Args>(args)).data()...))};
+    return JNITraits<ShortType>::getArrayElements(env, ary.get());
+  }
+
+  template <class... Args>
+  static value_type callStaticMethod(JNIEnv* env, jclass classID,
+                                     jmethodID methodID, Args&&... args)
+  {
+    LocalRef<_jshortArray> ary{
+      static_cast<jshortArray>(env->CallStaticObjectMethod(
+        classID, methodID,
+        JNITraits<typename std::decay<Args>::type>::toJavaValue(
+          env, std::forward<Args>(args)).data()...))};
+    return JNITraits<ShortType>::getArrayElements(env, ary.get());
+  }
+};
+
+template <>
+struct JNITraits<ArrayType<IntType>>
+{
+  using value_type = ArrayType<IntType>;
+
+  static std::string getSignature()
+  {
+    return "[I";
+  }
+
+  template <class Arg>
+  static ValueHolder<LocalRef<_jintArray>> toJavaValue(JNIEnv* env, Arg&& arg)
+  {
+    auto ary = env->NewIntArray(arg.size());
+    env->SetIntArrayRegion(ary, 0, arg.size(),
+                           reinterpret_cast<const jint*>(arg.data()));
+    return ValueHolder<LocalRef<_jintArray>>{LocalRef<_jintArray>{ary}};
+  }
+
+  static ArrayType<ArrayType<IntType>> getArrayElements(JNIEnv* env,
+                                                        jobjectArray ary)
+  {
+    const auto len = env->GetArrayLength(ary);
+    ArrayType<ArrayType<IntType>> res;
+    res.reserve(len);
+    for (jsize i = 0; i < len; ++i)
+    {
+      LocalRef<_jintArray> a{
+        static_cast<jintArray>(env->GetObjectArrayElement(ary, i))};
+      res.emplace_back(
+        std::move(JNITraits<IntType>::getArrayElements(env, a.get())));
+    }
+    return res;
+  }
+
+  template <class Arg>
+  static void setField(JNIEnv* env, jobject obj, jfieldID fieldID, Arg&& arg)
+  {
+    env->SetObjectField(obj, fieldID, toJavaValue(env, arg).data());
+  }
+
+  static value_type getField(JNIEnv* env, jobject obj, jfieldID fieldID)
+  {
+    LocalRef<_jintArray> ary{
+      static_cast<jintArray>(env->GetObjectField(obj, fieldID))};
+    return JNITraits<IntType>::getArrayElements(env, ary.get());
+  }
+
+  template <class Arg>
+  static void setStaticField(JNIEnv* env, jclass classID, jfieldID fieldID,
+                             Arg&& arg)
+  {
+    env->SetStaticObjectField(classID, fieldID, toJavaValue(env, arg).data());
+  }
+
+  static value_type getStaticField(JNIEnv* env, jclass classID,
+                                   jfieldID fieldID)
+  {
+    LocalRef<_jintArray> ary{
+      static_cast<jintArray>(env->GetStaticObjectField(classID, fieldID))};
+    return JNITraits<IntType>::getArrayElements(env, ary.get());
+  }
+
+  template <class... Args>
+  static value_type callMethod(JNIEnv* env, jobject obj, jmethodID methodID,
+                               Args&&... args)
+  {
+    LocalRef<_jintArray> ary{static_cast<jintArray>(env->CallObjectMethod(
+      obj, methodID, JNITraits<typename std::decay<Args>::type>::toJavaValue(
+                       env, std::forward<Args>(args)).data()...))};
+    return JNITraits<IntType>::getArrayElements(env, ary.get());
+  }
+
+  template <class... Args>
+  static value_type callStaticMethod(JNIEnv* env, jclass classID,
+                                     jmethodID methodID, Args&&... args)
+  {
+    LocalRef<_jintArray> ary{static_cast<jintArray>(env->CallStaticObjectMethod(
+      classID, methodID,
+      JNITraits<typename std::decay<Args>::type>::toJavaValue(
+        env, std::forward<Args>(args)).data()...))};
+    return JNITraits<IntType>::getArrayElements(env, ary.get());
+  }
+};
+
+template <>
+struct JNITraits<ArrayType<LongType>>
+{
+  using value_type = ArrayType<LongType>;
+
+  static std::string getSignature()
+  {
+    return "[J";
+  }
+
+  template <class Arg>
+  static ValueHolder<LocalRef<_jlongArray>> toJavaValue(JNIEnv* env, Arg&& arg)
+  {
+    auto ary = env->NewLongArray(arg.size());
+    env->SetLongArrayRegion(ary, 0, arg.size(),
+                            reinterpret_cast<const jlong*>(arg.data()));
+    return ValueHolder<LocalRef<_jlongArray>>{LocalRef<_jlongArray>{ary}};
+  }
+
+  static ArrayType<ArrayType<LongType>> getArrayElements(JNIEnv* env,
+                                                         jobjectArray ary)
+  {
+    const auto len = env->GetArrayLength(ary);
+    ArrayType<ArrayType<LongType>> res;
+    res.reserve(len);
+    for (jsize i = 0; i < len; ++i)
+    {
+      LocalRef<_jlongArray> a{
+        static_cast<jlongArray>(env->GetObjectArrayElement(ary, i))};
+      res.emplace_back(
+        std::move(JNITraits<LongType>::getArrayElements(env, a.get())));
+    }
+    return res;
+  }
+
+  template <class Arg>
+  static void setField(JNIEnv* env, jobject obj, jfieldID fieldID, Arg&& arg)
+  {
+    env->SetObjectField(obj, fieldID, toJavaValue(env, arg).data());
+  }
+
+  static value_type getField(JNIEnv* env, jobject obj, jfieldID fieldID)
+  {
+    LocalRef<_jlongArray> ary{
+      static_cast<jlongArray>(env->GetObjectField(obj, fieldID))};
+    return JNITraits<LongType>::getArrayElements(env, ary.get());
+  }
+
+  template <class Arg>
+  static void setStaticField(JNIEnv* env, jclass classID, jfieldID fieldID,
+                             Arg&& arg)
+  {
+    env->SetStaticObjectField(classID, fieldID, toJavaValue(env, arg).data());
+  }
+
+  static value_type getStaticField(JNIEnv* env, jclass classID,
+                                   jfieldID fieldID)
+  {
+    LocalRef<_jlongArray> ary{
+      static_cast<jlongArray>(env->GetStaticObjectField(classID, fieldID))};
+    return JNITraits<LongType>::getArrayElements(env, ary.get());
+  }
+
+  template <class... Args>
+  static value_type callMethod(JNIEnv* env, jobject obj, jmethodID methodID,
+                               Args&&... args)
+  {
+    LocalRef<_jlongArray> ary{static_cast<jlongArray>(env->CallObjectMethod(
+      obj, methodID, JNITraits<typename std::decay<Args>::type>::toJavaValue(
+                       env, std::forward<Args>(args)).data()...))};
+    return JNITraits<LongType>::getArrayElements(env, ary.get());
+  }
+
+  template <class... Args>
+  static value_type callStaticMethod(JNIEnv* env, jclass classID,
+                                     jmethodID methodID, Args&&... args)
+  {
+    LocalRef<_jlongArray> ary{
+      static_cast<jlongArray>(env->CallStaticObjectMethod(
+        classID, methodID,
+        JNITraits<typename std::decay<Args>::type>::toJavaValue(
+          env, std::forward<Args>(args)).data()...))};
+    return JNITraits<LongType>::getArrayElements(env, ary.get());
+  }
+};
+
+template <>
+struct JNITraits<ArrayType<FloatType>>
+{
+  using value_type = ArrayType<FloatType>;
+
+  static std::string getSignature()
+  {
+    return "[F";
+  }
+
+  template <class Arg>
+  static ValueHolder<LocalRef<_jfloatArray>> toJavaValue(JNIEnv* env, Arg&& arg)
+  {
+    auto ary = env->NewFloatArray(arg.size());
+    env->SetFloatArrayRegion(ary, 0, arg.size(),
+                             reinterpret_cast<const jfloat*>(arg.data()));
+    return ValueHolder<LocalRef<_jfloatArray>>{LocalRef<_jfloatArray>{ary}};
+  }
+
+  static ArrayType<ArrayType<FloatType>> getArrayElements(JNIEnv* env,
+                                                          jobjectArray ary)
+  {
+    const auto len = env->GetArrayLength(ary);
+    ArrayType<ArrayType<FloatType>> res;
+    res.reserve(len);
+    for (jsize i = 0; i < len; ++i)
+    {
+      LocalRef<_jfloatArray> a{
+        static_cast<jfloatArray>(env->GetObjectArrayElement(ary, i))};
+      res.emplace_back(
+        std::move(JNITraits<FloatType>::getArrayElements(env, a.get())));
+    }
+    return res;
+  }
+
+  template <class Arg>
+  static void setField(JNIEnv* env, jobject obj, jfieldID fieldID, Arg&& arg)
+  {
+    env->SetObjectField(obj, fieldID, toJavaValue(env, arg).data());
+  }
+
+  static value_type getField(JNIEnv* env, jobject obj, jfieldID fieldID)
+  {
+    LocalRef<_jfloatArray> ary{
+      static_cast<jfloatArray>(env->GetObjectField(obj, fieldID))};
+    return JNITraits<FloatType>::getArrayElements(env, ary.get());
+  }
+
+  template <class Arg>
+  static void setStaticField(JNIEnv* env, jclass classID, jfieldID fieldID,
+                             Arg&& arg)
+  {
+    env->SetStaticObjectField(classID, fieldID, toJavaValue(env, arg).data());
+  }
+
+  static value_type getStaticField(JNIEnv* env, jclass classID,
+                                   jfieldID fieldID)
+  {
+    LocalRef<_jfloatArray> ary{
+      static_cast<jfloatArray>(env->GetStaticObjectField(classID, fieldID))};
+    return JNITraits<FloatType>::getArrayElements(env, ary.get());
+  }
+
+  template <class... Args>
+  static value_type callMethod(JNIEnv* env, jobject obj, jmethodID methodID,
+                               Args&&... args)
+  {
+    LocalRef<_jfloatArray> ary{static_cast<jfloatArray>(env->CallObjectMethod(
+      obj, methodID, JNITraits<typename std::decay<Args>::type>::toJavaValue(
+                       env, std::forward<Args>(args)).data()...))};
+    return JNITraits<FloatType>::getArrayElements(env, ary.get());
+  }
+
+  template <class... Args>
+  static value_type callStaticMethod(JNIEnv* env, jclass classID,
+                                     jmethodID methodID, Args&&... args)
+  {
+    LocalRef<_jfloatArray> ary{
+      static_cast<jfloatArray>(env->CallStaticObjectMethod(
+        classID, methodID,
+        JNITraits<typename std::decay<Args>::type>::toJavaValue(
+          env, std::forward<Args>(args)).data()...))};
+    return JNITraits<FloatType>::getArrayElements(env, ary.get());
+  }
+};
+
+template <>
+struct JNITraits<ArrayType<DoubleType>>
+{
+  using value_type = ArrayType<DoubleType>;
+
+  static std::string getSignature()
+  {
+    return "[D";
+  }
+
+  template <class Arg>
+  static ValueHolder<LocalRef<_jdoubleArray>> toJavaValue(JNIEnv* env,
+                                                          Arg&& arg)
+  {
+    auto ary = env->NewDoubleArray(arg.size());
+    env->SetDoubleArrayRegion(ary, 0, arg.size(),
+                              reinterpret_cast<const jdouble*>(arg.data()));
+    return ValueHolder<LocalRef<_jdoubleArray>>{LocalRef<_jdoubleArray>{ary}};
+  }
+
+  static ArrayType<ArrayType<DoubleType>> getArrayElements(JNIEnv* env,
+                                                           jobjectArray ary)
+  {
+    const auto len = env->GetArrayLength(ary);
+    ArrayType<ArrayType<DoubleType>> res;
+    res.reserve(len);
+    for (jsize i = 0; i < len; ++i)
+    {
+      LocalRef<_jdoubleArray> a{
+        static_cast<jdoubleArray>(env->GetObjectArrayElement(ary, i))};
+      res.emplace_back(
+        std::move(JNITraits<DoubleType>::getArrayElements(env, a.get())));
+    }
+    return res;
+  }
+
+  template <class Arg>
+  static void setField(JNIEnv* env, jobject obj, jfieldID fieldID, Arg&& arg)
+  {
+    env->SetObjectField(obj, fieldID, toJavaValue(env, arg).data());
+  }
+
+  static value_type getField(JNIEnv* env, jobject obj, jfieldID fieldID)
+  {
+    LocalRef<_jdoubleArray> ary{
+      static_cast<jdoubleArray>(env->GetObjectField(obj, fieldID))};
+    return JNITraits<DoubleType>::getArrayElements(env, ary.get());
+  }
+
+  template <class Arg>
+  static void setStaticField(JNIEnv* env, jclass classID, jfieldID fieldID,
+                             Arg&& arg)
+  {
+    env->SetStaticObjectField(classID, fieldID, toJavaValue(env, arg).data());
+  }
+
+  static value_type getStaticField(JNIEnv* env, jclass classID,
+                                   jfieldID fieldID)
+  {
+    LocalRef<_jdoubleArray> ary{
+      static_cast<jdoubleArray>(env->GetStaticObjectField(classID, fieldID))};
+    return JNITraits<DoubleType>::getArrayElements(env, ary.get());
+  }
+
+  template <class... Args>
+  static value_type callMethod(JNIEnv* env, jobject obj, jmethodID methodID,
+                               Args&&... args)
+  {
+    LocalRef<_jdoubleArray> ary{static_cast<jdoubleArray>(env->CallObjectMethod(
+      obj, methodID, JNITraits<typename std::decay<Args>::type>::toJavaValue(
+                       env, std::forward<Args>(args)).data()...))};
+    return JNITraits<DoubleType>::getArrayElements(env, ary.get());
+  }
+
+  template <class... Args>
+  static value_type callStaticMethod(JNIEnv* env, jclass classID,
+                                     jmethodID methodID, Args&&... args)
+  {
+    LocalRef<_jdoubleArray> ary{
+      static_cast<jdoubleArray>(env->CallStaticObjectMethod(
+        classID, methodID,
+        JNITraits<typename std::decay<Args>::type>::toJavaValue(
+          env, std::forward<Args>(args)).data()...))};
+    return JNITraits<DoubleType>::getArrayElements(env, ary.get());
+  }
+};
+
+template <>
+struct JNITraits<ArrayType<StringType>>
+{
+  using value_type = ArrayType<StringType>;
+
+  static std::string getSignature()
+  {
+    return "[java/lang/String;";
+  }
+
+  template <class Arg>
+  static ValueHolder<LocalRef<_jobjectArray>> toJavaValue(JNIEnv* env,
+                                                          Arg&& arg)
+  {
+    LocalRef<_jclass> c{env->FindClass("java/lang/String")};
+    auto ary = env->NewObjectArray(arg.size(), c.get(), 0);
+    for (jsize i = 0; i < static_cast<jsize>(arg.size()); ++i)
+    {
+      env->SetObjectArrayElement(
+        ary, i, JNITraits<StringType>::toJavaValue(env, arg[i]).data());
+    }
+    return ValueHolder<LocalRef<_jobjectArray>>{LocalRef<_jobjectArray>{ary}};
+  }
+
+  static ArrayType<ArrayType<StringType>> getArrayElements(JNIEnv* env,
+                                                           jobjectArray ary)
+  {
+    const auto len = env->GetArrayLength(ary);
+    ArrayType<ArrayType<StringType>> res;
+    res.reserve(len);
+    for (jsize i = 0; i < len; ++i)
+    {
+      LocalRef<_jobjectArray> a{
+        static_cast<jobjectArray>(env->GetObjectArrayElement(ary, i))};
+      res.emplace_back(
+        std::move(JNITraits<StringType>::getArrayElements(env, a.get())));
+    }
+    return res;
+  }
+
+  template <class Arg>
+  static void setField(JNIEnv* env, jobject obj, jfieldID fieldID, Arg&& arg)
+  {
+    env->SetObjectField(obj, fieldID, toJavaValue(env, arg).data());
+  }
+
+  static value_type getField(JNIEnv* env, jobject obj, jfieldID fieldID)
+  {
+    LocalRef<_jobjectArray> ary{
+      static_cast<jobjectArray>(env->GetObjectField(obj, fieldID))};
+    return JNITraits<StringType>::getArrayElements(env, ary.get());
+  }
+
+  template <class Arg>
+  static void setStaticField(JNIEnv* env, jclass classID, jfieldID fieldID,
+                             Arg&& arg)
+  {
+    env->SetStaticObjectField(classID, fieldID, toJavaValue(env, arg).data());
+  }
+
+  static value_type getStaticField(JNIEnv* env, jclass classID,
+                                   jfieldID fieldID)
+  {
+    LocalRef<_jobjectArray> ary{
+      static_cast<jobjectArray>(env->GetStaticObjectField(classID, fieldID))};
+    return JNITraits<StringType>::getArrayElements(env, ary.get());
+  }
+
+  template <class... Args>
+  static value_type callMethod(JNIEnv* env, jobject obj, jmethodID methodID,
+                               Args&&... args)
+  {
+    LocalRef<_jobjectArray> ary{static_cast<jobjectArray>(env->CallObjectMethod(
+      obj, methodID, JNITraits<typename std::decay<Args>::type>::toJavaValue(
+                       env, std::forward<Args>(args)).data()...))};
+    return JNITraits<StringType>::getArrayElements(env, ary.get());
+  }
+
+  template <class... Args>
+  static value_type callStaticMethod(JNIEnv* env, jclass classID,
+                                     jmethodID methodID, Args&&... args)
+  {
+    LocalRef<_jobjectArray> ary{
+      static_cast<jobjectArray>(env->CallStaticObjectMethod(
+        classID, methodID,
+        JNITraits<typename std::decay<Args>::type>::toJavaValue(
+          env, std::forward<Args>(args)).data()...))};
+    return JNITraits<StringType>::getArrayElements(env, ary.get());
+  }
+};
+
+template <class T>
+struct JNITraits<
+  ArrayType<T>,
+  typename std::enable_if<std::is_same<
+    decltype(std::declval<T&>().getJNIObjectHandle()), jobject>::value>::type>
+{
+  using value_type = ArrayType<T>;
+
+  static std::string getSignature()
+  {
+    return "[" + JNITraits<T>::getSignature();
+  }
+
+  template <class Arg>
+  static ValueHolder<LocalRef<_jobjectArray>> toJavaValue(JNIEnv* env,
+                                                          Arg&& arg)
+  {
+    LocalRef<_jclass> c{env->FindClass(JNITraits<T>::getSignature().c_str())};
+    auto ary = env->NewObjectArray(arg.size(), c.get(), 0);
+    for (jsize i = 0; i < static_cast<jsize>(arg.size()); ++i)
+    {
+      env->SetObjectArrayElement(ary, i,
+                                 JNITraits<T>::toJavaValue(env, arg[i]).data());
+    }
+    return ValueHolder<LocalRef<_jobjectArray>>{LocalRef<_jobjectArray>{ary}};
+  }
+
+  static ArrayType<ArrayType<T>> getArrayElements(JNIEnv* env, jobjectArray ary)
+  {
+    const auto len = env->GetArrayLength(ary);
+    ArrayType<ArrayType<T>> res;
+    res.reserve(len);
+    for (jsize i = 0; i < len; ++i)
+    {
+      LocalRef<_jobjectArray> a{
+        static_cast<jobjectArray>(env->GetObjectArrayElement(ary, i))};
+      res.emplace_back(std::move(JNITraits<T>::getArrayElements(env, a.get())));
+    }
+    return res;
+  }
+
+  template <class Arg>
+  static void setField(JNIEnv* env, jobject obj, jfieldID fieldID, Arg&& arg)
+  {
+    env->SetObjectField(obj, fieldID, toJavaValue(env, arg).data());
+  }
+
+  static value_type getField(JNIEnv* env, jobject obj, jfieldID fieldID)
+  {
+    LocalRef<_jobjectArray> ary{
+      static_cast<jobjectArray>(env->GetObjectField(obj, fieldID))};
+    return JNITraits<T>::getArrayElements(env, ary.get());
+  }
+
+  template <class Arg>
+  static void setStaticField(JNIEnv* env, jclass classID, jfieldID fieldID,
+                             Arg&& arg)
+  {
+    env->SetStaticObjectField(classID, fieldID, toJavaValue(env, arg).data());
+  }
+
+  static value_type getStaticField(JNIEnv* env, jclass classID,
+                                   jfieldID fieldID)
+  {
+    LocalRef<_jobjectArray> ary{
+      static_cast<jobjectArray>(env->GetStaticObjectField(classID, fieldID))};
+    return JNITraits<T>::getArrayElements(env, ary.get());
+  }
+
+  template <class... Args>
+  static value_type callMethod(JNIEnv* env, jobject obj, jmethodID methodID,
+                               Args&&... args)
+  {
+    LocalRef<_jobjectArray> ary{static_cast<jobjectArray>(env->CallObjectMethod(
+      obj, methodID, JNITraits<typename std::decay<Args>::type>::toJavaValue(
+                       env, std::forward<Args>(args)).data()...))};
+    return JNITraits<T>::getArrayElements(env, ary.get());
+  }
+
+  template <class... Args>
+  static value_type callStaticMethod(JNIEnv* env, jclass classID,
+                                     jmethodID methodID, Args&&... args)
+  {
+    LocalRef<_jobjectArray> ary{
+      static_cast<jobjectArray>(env->CallStaticObjectMethod(
+        classID, methodID,
+        JNITraits<typename std::decay<Args>::type>::toJavaValue(
+          env, std::forward<Args>(args)).data()...))};
+    return JNITraits<T>::getArrayElements(env, ary.get());
+  }
+};
+
+template <class T>
+struct JNITraits<ArrayType<ArrayType<T>>>
+{
+  using value_type = ArrayType<ArrayType<T>>;
+
+  static std::string getSignature()
+  {
+    return "[" + JNITraits<ArrayType<T>>::getSignature();
+  }
+
+  template <class Arg>
+  static ValueHolder<LocalRef<_jobjectArray>> toJavaValue(JNIEnv* env,
+                                                          Arg&& arg)
+  {
+    LocalRef<_jclass> c{
+      env->FindClass(JNITraits<ArrayType<T>>::getSignature().c_str())};
+    auto ary = env->NewObjectArray(arg.size(), c.get(), 0);
+    for (jsize i = 0; i < static_cast<jsize>(arg.size()); ++i)
+    {
+      env->SetObjectArrayElement(
+        ary, i, JNITraits<ArrayType<T>>::toJavaValue(env, arg[i]).data());
+    }
+    return ValueHolder<LocalRef<_jobjectArray>>{LocalRef<_jobjectArray>{ary}};
+  }
+
+  static ArrayType<ArrayType<ArrayType<T>>> getArrayElements(JNIEnv* env,
+                                                             jobjectArray ary)
+  {
+    const auto len = env->GetArrayLength(ary);
+    ArrayType<ArrayType<ArrayType<T>>> res;
+    res.reserve(len);
+    for (jsize i = 0; i < len; ++i)
+    {
+      LocalRef<_jobjectArray> a{
+        static_cast<jobjectArray>(env->GetObjectArrayElement(ary, i))};
+      res.emplace_back(
+        std::move(JNITraits<ArrayType<T>>::getArrayElements(env, a.get())));
+    }
+    return res;
+  }
+
+  template <class Arg>
+  static void setField(JNIEnv* env, jobject obj, jfieldID fieldID, Arg&& arg)
+  {
+    env->SetObjectField(obj, fieldID, toJavaValue(env, arg).data());
+  }
+
+  static value_type getField(JNIEnv* env, jobject obj, jfieldID fieldID)
+  {
+    LocalRef<_jobjectArray> ary{
+      static_cast<jobjectArray>(env->GetObjectField(obj, fieldID))};
+    return JNITraits<ArrayType<T>>::getArrayElements(env, ary.get());
+  }
+
+  template <class Arg>
+  static void setStaticField(JNIEnv* env, jclass classID, jfieldID fieldID,
+                             Arg&& arg)
+  {
+    env->SetStaticObjectField(classID, fieldID, toJavaValue(env, arg).data());
+  }
+
+  static value_type getStaticField(JNIEnv* env, jclass classID,
+                                   jfieldID fieldID)
+  {
+    LocalRef<_jobjectArray> ary{
+      static_cast<jobjectArray>(env->GetStaticObjectField(classID, fieldID))};
+    return JNITraits<ArrayType<T>>::getArrayElements(env, ary.get());
+  }
+
+  template <class... Args>
+  static value_type callMethod(JNIEnv* env, jobject obj, jmethodID methodID,
+                               Args&&... args)
+  {
+    LocalRef<_jobjectArray> ary{static_cast<jobjectArray>(env->CallObjectMethod(
+      obj, methodID, JNITraits<typename std::decay<Args>::type>::toJavaValue(
+                       env, std::forward<Args>(args)).data()...))};
+    return JNITraits<ArrayType<T>>::getArrayElements(env, ary.get());
+  }
+
+  template <class... Args>
+  static value_type callStaticMethod(JNIEnv* env, jclass classID,
+                                     jmethodID methodID, Args&&... args)
+  {
+    LocalRef<_jobjectArray> ary{
+      static_cast<jobjectArray>(env->CallStaticObjectMethod(
+        classID, methodID,
+        JNITraits<typename std::decay<Args>::type>::toJavaValue(
+          env, std::forward<Args>(args)).data()...))};
+    return JNITraits<ArrayType<T>>::getArrayElements(env, ary.get());
+  }
+};
+
+template <class... Args>
+inline LocalRef<_jobject> newObject(const char* className,
+                                    const char* signature, Args&&... args)
+{
+  auto env = getJNIEnv();
+  LocalRef<_jclass> classID{env->FindClass(className)};
+  auto methodID = env->GetMethodID(classID.get(), "<init>", signature);
+
+  if (methodID == nullptr)
+  {
+    throw std::runtime_error{"JNIHelper::newObject"};
+  }
+
+  return LocalRef<_jobject>{env->NewObject(
+    classID.get(), methodID,
+    detail::JNITraits<typename std::decay<Args>::type>::toJavaValue(
+      env, std::forward<Args>(args)).data()...)};
+}
+
+inline LocalRef<_jobject> newString(const char* s, std::size_t count)
+{
+  auto env = getJNIEnv();
+  LocalRef<_jclass> classID{env->FindClass("java/lang/String")};
+  LocalRef<_jbyteArray> bytes{env->NewByteArray(count)};
+  env->SetByteArrayRegion(bytes.get(), 0, count,
+                          reinterpret_cast<const jbyte*>(s));
+  LocalRef<_jstring> encoding{env->NewStringUTF("UTF-8")};
+  return LocalRef<_jobject>{env->NewObject(
+    classID.get(),
+    env->GetMethodID(classID.get(), "<init>", "([BLjava/lang/String;)V"),
+    bytes.get(), encoding.get())};
+}
+
+} // namespace detail
+
+template <class Arg>
+inline void setField(jobject obj, const char* fieldName, const char* signature,
+                     Arg&& x)
+{
+  auto env = getJNIEnv();
+  LocalRef<_jclass> classID{env->GetObjectClass(obj)};
+  auto fieldID = env->GetFieldID(classID.get(), fieldName, signature);
+
+  if (fieldID == nullptr)
+  {
+    throw std::runtime_error{"JNIHelper::setField"};
+  }
+
+  detail::JNITraits<typename std::decay<Arg>::type>::setField(
+    env, obj, fieldID, std::forward<Arg>(x));
+}
+
+template <class R>
+inline R getField(jobject obj, const char* fieldName, const char* signature)
+{
+  auto env = getJNIEnv();
+  LocalRef<_jclass> classID{env->GetObjectClass(obj)};
+  auto fieldID = env->GetFieldID(classID.get(), fieldName, signature);
+
+  if (fieldID == nullptr)
+  {
+    throw std::runtime_error{"JNIHelper::getField"};
+  }
+
+  return detail::JNITraits<typename std::decay<R>::type>::getField(env, obj,
+                                                                   fieldID);
+}
+
+template <class Arg>
+inline void setStaticField(const char* className, const char* fieldName,
+                           const char* signature, Arg&& x)
+{
+  auto env = getJNIEnv();
+  LocalRef<_jclass> classID{env->FindClass(className)};
+  auto fieldID = env->GetStaticFieldID(classID.get(), fieldName, signature);
+
+  if (fieldID == nullptr)
+  {
+    throw std::runtime_error{"JNIHelper::setStaticField"};
+  }
+
+  detail::JNITraits<typename std::decay<Arg>::type>::setStaticField(
+    env, classID.get(), fieldID, std::forward<Arg>(x));
+}
+
+template <class R>
+inline R getStaticField(const char* className, const char* fieldName,
+                        const char* signature)
+{
+  auto env = getJNIEnv();
+  LocalRef<_jclass> classID{env->FindClass(className)};
+  auto fieldID = env->GetStaticFieldID(classID.get(), fieldName, signature);
+
+  if (fieldID == nullptr)
+  {
+    throw std::runtime_error{"JNIHelper::getStaticField"};
+  }
+
+  return detail::JNITraits<typename std::decay<R>::type>::getStaticField(
+    env, classID.get(), fieldID);
+}
+
+template <class R, class... Args>
+inline R callMethod(jobject obj, const char* methodName, const char* signature,
+                    Args&&... args)
+{
+  auto env = getJNIEnv();
+  LocalRef<_jclass> classID{env->GetObjectClass(obj)};
+  auto methodID = env->GetMethodID(classID.get(), methodName, signature);
+
+  if (methodID == nullptr)
+  {
+    throw std::runtime_error{"JNIHelper::callMethod"};
+  }
+
+  return detail::JNITraits<typename std::decay<R>::type>::callMethod(
+    env, obj, methodID, std::forward<Args>(args)...);
+}
+
+template <class R, class... Args>
+inline R callStaticMethod(const char* className, const char* methodName,
+                          const char* signature, Args&&... args)
+{
+  auto env = getJNIEnv();
+  LocalRef<_jclass> classID{env->FindClass(className)};
+  auto methodID = env->GetStaticMethodID(classID.get(), methodName, signature);
+
+  if (methodID == nullptr)
+  {
+    throw std::runtime_error{"JNIHelper::callStaticMethod"};
+  }
+
+  return detail::JNITraits<typename std::decay<R>::type>::callStaticMethod(
+    env, classID.get(), methodID, std::forward<Args>(args)...);
+}
+
+} // namespace JNIHelper
+
+{{range (Reverse .NamespacePrefix)}}
+} // namespace {{.}}
+{{end}}
+
+#endif // {{.IncGuardPrefix}}{{range .NamespacePrefix}}{{. | ToUpper}}_{{end}}COMMON_{{.HeaderExt | ToUpper}}{{.IncGuardSuffix}}

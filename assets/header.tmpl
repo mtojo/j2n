@@ -1,0 +1,112 @@
+#ifndef {{.IncGuardPrefix}}{{range .NamespacePrefix}}{{. | ToUpper}}_{{end}}{{range (Split .PackageName "/")}}{{. | ToUpper}}_{{end}}{{ReplaceAll .ClassName "$" "_" | ToUpper}}_{{.HeaderExt | ToUpper}}{{.IncGuardSuffix}}
+#define {{.IncGuardPrefix}}{{range .NamespacePrefix}}{{. | ToUpper}}_{{end}}{{range (Split .PackageName "/")}}{{. | ToUpper}}_{{end}}{{ReplaceAll .ClassName "$" "_" | ToUpper}}_{{.HeaderExt | ToUpper}}{{.IncGuardSuffix}}
+
+#include <{{range .NamespacePrefix}}{{.}}/{{end}}common.{{.HeaderExt}}>
+
+{{if .SuperClass}}
+{{$header := print "L" .SuperClass ";" | LookupHeader}}
+{{if $header}}
+#include <{{$header}}>
+{{end}}
+{{end}}
+
+{{range .Dependencies}}
+{{$slice := Split . "/"}}
+{{$name := Back $slice | RemoveExt}}
+{{range $index, $element := PopBack $slice}}
+namespace {{.}}{{if IsReserved .}}_{{end}}
+{
+{{end}}
+class {{$name}}{{if IsReserved $name}}_{{end}};
+{{range $index, $element := PopBack $slice | Reverse}}
+} // namespace {{.}}{{if IsReserved .}}_{{end}}
+{{end}}
+{{end}}
+
+{{range .NamespacePrefix}}
+namespace {{.}}
+{
+{{end}}
+
+{{range (Split .PackageName "/")}}
+namespace {{.}}{{if IsReserved .}}_{{end}}
+{
+{{end}}
+
+class {{ReplaceAll .ClassName "$" "_"}}{{if .IsFinal}} final{{end}}
+{{if .SuperClass}}
+  : public {{range .NamespacePrefix}}{{.}}::{{end}}{{range (Split (Dir .SuperClass) "/")}}{{.}}{{if IsReserved .}}_{{end}}::{{end}}{{ReplaceAll .SuperClass "$" "_" | Base}}
+{{end}}
+{
+{{if .SuperClass}}
+private:
+  using base_type = {{range .NamespacePrefix}}{{.}}::{{end}}{{range (Split (Dir .SuperClass) "/")}}{{.}}{{if IsReserved .}}_{{end}}::{{end}}{{ReplaceAll .SuperClass "$" "_" | Base}};
+{{end}}
+
+public:
+  static constexpr const char* getJNIClassName()
+  {
+    return "L{{.FullName}};";
+  }
+
+{{if eq .FullName "java/lang/String"}}
+  String(const std::string& s);
+  String(const char* s, std::size_t count);
+{{end}}
+
+{{range .Initializers}}
+  {{ReplaceAll $.ClassName "$" "_"}}({{range $index, $element := .ArgumentTypes}}{{if $index}}, {{end}}{{if IsPrimitive $element}}{{$element}}{{else}}const {{ReplaceAll $element "$" "_"}}&{{end}} _{{$index}}{{end}});
+{{end}}
+
+{{if .SuperClass}}
+  {{ReplaceAll .ClassName "$" "_"}}(jobject obj);
+
+  {{ReplaceAll .ClassName "$" "_"}}({{ReplaceAll .ClassName "$" "_"}}&& other) noexcept;
+{{else}}
+  {{ReplaceAll .ClassName "$" "_"}}(jobject obj);
+
+  {{ReplaceAll .ClassName "$" "_"}}({{ReplaceAll .ClassName "$" "_"}}&& other) noexcept;
+
+  virtual ~{{ReplaceAll .ClassName "$" "_"}}();
+{{end}}
+
+{{range .Methods}}
+  {{if .IsStatic}}static {{end}}{{ReplaceAll .ReturnType "$" "_"}} {{.Name}}{{if IsReserved .Name}}_{{end}}({{range $index, $element := .ArgumentTypes}}{{if $index}}, {{end}}{{if IsPrimitive $element}}{{$element}}{{else}}const {{ReplaceAll $element "$" "_"}}&{{end}} _{{$index}}{{end}});
+{{end}}
+
+{{range .Fields}}
+{{if .IsEnum}}
+  static {{ReplaceAll .Type "$" "_"}} get{{.Name | UpperCamelCase}}EnumField();
+{{else}}
+{{if not .IsFinal}}
+  {{if .IsStatic}}static {{end}}void set{{.Name | UpperCamelCase}}{{if .IsStatic}}Static{{end}}Field({{if IsPrimitive .Type}}{{.Type}}{{else}}const {{range (Split (Dir .Type) "::")}}{{.}}{{if IsReserved .}}_{{end}}::{{end}}{{ReplaceAll .Type "$" "_"}}&{{end}} x);
+{{end}}
+  {{if .IsStatic}}static {{end}}{{ReplaceAll .Type "$" "_"}} get{{.Name | UpperCamelCase}}{{if .IsStatic}}Static{{end}}Field(){{if not .IsStatic}} const{{end}};
+{{end}}
+{{end}}
+
+{{if not .SuperClass}}
+  jobject getJNIObjectHandle() const;
+{{end}}
+
+{{if eq .FullName "java/lang/String"}}
+  operator std::string() const;
+{{end}}
+
+  {{ReplaceAll .ClassName "$" "_"}}& operator=({{ReplaceAll .ClassName "$" "_"}}&& rhs) noexcept;
+
+{{if not .SuperClass}}
+protected:
+  jobject obj_;
+{{end}}
+};
+
+{{range (Split .PackageName "/" | Reverse)}}
+} // namespace {{.}}{{if IsReserved .}}_{{end}}
+{{end}}
+
+{{range (Reverse .NamespacePrefix)}}
+} // namespace {{.}}
+{{end}}
+
+#endif // {{.IncGuardPrefix}}{{range .NamespacePrefix}}{{. | ToUpper}}_{{end}}{{range (Split .PackageName "/")}}{{. | ToUpper}}_{{end}}{{ReplaceAll .ClassName "$" "_" | ToUpper}}_{{.HeaderExt | ToUpper}}{{.IncGuardSuffix}}
