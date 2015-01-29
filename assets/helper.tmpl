@@ -1,6 +1,7 @@
 #ifndef {{.IncGuardPrefix}}{{range .NamespacePrefix}}{{. | ToUpper}}_{{end}}COMMON_{{.HeaderExt | ToUpper}}{{.IncGuardSuffix}}
 #define {{.IncGuardPrefix}}{{range .NamespacePrefix}}{{. | ToUpper}}_{{end}}COMMON_{{.HeaderExt | ToUpper}}{{.IncGuardSuffix}}
 
+#include <limits>
 #include <memory>
 #include <stdexcept>
 #include <string>
@@ -127,7 +128,7 @@ struct JNITraits<VoidType>
 {
   using value_type = VoidType;
 
-  static std::string getSignature()
+  static std::string getQualifiedName()
   {
     return "V";
   }
@@ -175,7 +176,7 @@ struct JNITraits<BooleanType>
 {
   using value_type = BooleanType;
 
-  static std::string getSignature()
+  static std::string getQualifiedName()
   {
     return "Z";
   }
@@ -249,7 +250,7 @@ struct JNITraits<ByteType>
 {
   using value_type = ByteType;
 
-  static std::string getSignature()
+  static std::string getQualifiedName()
   {
     return "B";
   }
@@ -322,7 +323,7 @@ struct JNITraits<CharType>
 {
   using value_type = CharType;
 
-  static std::string getSignature()
+  static std::string getQualifiedName()
   {
     return "C";
   }
@@ -395,7 +396,7 @@ struct JNITraits<ShortType>
 {
   using value_type = ShortType;
 
-  static std::string getSignature()
+  static std::string getQualifiedName()
   {
     return "S";
   }
@@ -468,7 +469,7 @@ struct JNITraits<IntType>
 {
   using value_type = IntType;
 
-  static std::string getSignature()
+  static std::string getQualifiedName()
   {
     return "I";
   }
@@ -541,7 +542,7 @@ struct JNITraits<LongType>
 {
   using value_type = LongType;
 
-  static std::string getSignature()
+  static std::string getQualifiedName()
   {
     return "J";
   }
@@ -614,7 +615,7 @@ struct JNITraits<FloatType>
 {
   using value_type = FloatType;
 
-  static std::string getSignature()
+  static std::string getQualifiedName()
   {
     return "F";
   }
@@ -622,7 +623,33 @@ struct JNITraits<FloatType>
   template <class Arg>
   static ValueHolder<jfloat> toJavaValue(JNIEnv* env, Arg&& arg)
   {
-    return ValueHolder<jfloat>{static_cast<jfloat>(arg)};
+    if (arg == std::numeric_limits<FloatType>::quiet_NaN())
+    {
+      LocalRef<_jclass> classID{env->FindClass("java/lang/Float")};
+      auto fieldID = env->GetStaticFieldID(classID.get(), "NaN", "F");
+      return ValueHolder<jfloat>{
+        env->GetStaticFloatField(classID.get(), fieldID)};
+    }
+    else if (arg == +std::numeric_limits<FloatType>::infinity())
+    {
+      LocalRef<_jclass> classID{env->FindClass("java/lang/Float")};
+      auto fieldID = env->GetStaticFieldID(classID.get(), "NaN",
+                                           "POSITIVE_INFINITY");
+      return ValueHolder<jfloat>{
+        env->GetStaticFloatField(classID.get(), fieldID)};
+    }
+    else if (arg == -std::numeric_limits<FloatType>::infinity())
+    {
+      LocalRef<_jclass> classID{env->FindClass("java/lang/Float")};
+      auto fieldID = env->GetStaticFieldID(classID.get(), "NaN",
+                                           "NEGATIVE_INFINITY");
+      return ValueHolder<jfloat>{
+        env->GetStaticFloatField(classID.get(), fieldID)};
+    }
+    else
+    {
+      return ValueHolder<jfloat>{static_cast<jfloat>(arg)};
+    }
   }
 
   static ArrayType<FloatType> getArrayElements(JNIEnv* env, jfloatArray ary)
@@ -687,7 +714,7 @@ struct JNITraits<DoubleType>
 {
   using value_type = DoubleType;
 
-  static std::string getSignature()
+  static std::string getQualifiedName()
   {
     return "D";
   }
@@ -695,7 +722,33 @@ struct JNITraits<DoubleType>
   template <class Arg>
   static ValueHolder<jdouble> toJavaValue(JNIEnv* env, Arg&& arg)
   {
-    return ValueHolder<jdouble>{static_cast<jdouble>(arg)};
+    if (arg == std::numeric_limits<DoubleType>::quiet_NaN())
+    {
+      LocalRef<_jclass> classID{env->FindClass("java/lang/Double")};
+      auto fieldID = env->GetStaticFieldID(classID.get(), "NaN", "F");
+      return ValueHolder<jdouble>{
+        env->GetStaticDoubleField(classID.get(), fieldID)};
+    }
+    else if (arg == +std::numeric_limits<DoubleType>::infinity())
+    {
+      LocalRef<_jclass> classID{env->FindClass("java/lang/Double")};
+      auto fieldID = env->GetStaticFieldID(classID.get(),
+                                           "POSITIVE_INFINITY", "F");
+      return ValueHolder<jdouble>{
+        env->GetStaticDoubleField(classID.get(), fieldID)};
+    }
+    else if (arg == -std::numeric_limits<DoubleType>::infinity())
+    {
+      LocalRef<_jclass> classID{env->FindClass("java/lang/Double")};
+      auto fieldID = env->GetStaticFieldID(classID.get(),
+                                           "NEGATIVE_INFINITY", "F");
+      return ValueHolder<jdouble>{
+        env->GetStaticDoubleField(classID.get(), fieldID)};
+    }
+    else
+    {
+      return ValueHolder<jdouble>{static_cast<jdouble>(arg)};
+    }
   }
 
   static ArrayType<DoubleType> getArrayElements(JNIEnv* env, jdoubleArray ary)
@@ -760,7 +813,7 @@ struct JNITraits<StringType>
 {
   using value_type = StringType;
 
-  static std::string getSignature()
+  static std::string getQualifiedName()
   {
     return "Ljava/lang/String;";
   }
@@ -788,9 +841,16 @@ struct JNITraits<StringType>
     {
       LocalRef<_jstring> str{
         static_cast<jstring>(env->GetObjectArrayElement(ary, i))};
-      const auto bytes = env->GetStringUTFChars(str.get(), nullptr);
-      res.emplace_back(bytes);
-      env->ReleaseStringUTFChars(str.get(), bytes);
+      if (str)
+      {
+        const auto bytes = env->GetStringUTFChars(str.get(), nullptr);
+        res.emplace_back(bytes);
+        env->ReleaseStringUTFChars(str.get(), bytes);
+      }
+      else
+      {
+        res.emplace_back();
+      }
     }
     return res;
   }
@@ -805,9 +865,13 @@ struct JNITraits<StringType>
   {
     LocalRef<_jstring> str{
       static_cast<jstring>(env->GetObjectField(obj, fieldID))};
-    const auto bytes = env->GetStringUTFChars(str.get(), nullptr);
-    value_type res{bytes};
-    env->ReleaseStringUTFChars(str.get(), bytes);
+    value_type res;
+    if (str)
+    {
+      const auto bytes = env->GetStringUTFChars(str.get(), nullptr);
+      res.assign(bytes);
+      env->ReleaseStringUTFChars(str.get(), bytes);
+    }
     return res;
   }
 
@@ -823,9 +887,13 @@ struct JNITraits<StringType>
   {
     LocalRef<_jstring> str{
       static_cast<jstring>(env->GetStaticObjectField(classID, fieldID))};
-    const auto bytes = env->GetStringUTFChars(str.get(), nullptr);
-    value_type res{bytes};
-    env->ReleaseStringUTFChars(str.get(), bytes);
+    value_type res;
+    if (str)
+    {
+      const auto bytes = env->GetStringUTFChars(str.get(), nullptr);
+      res.assign(bytes);
+      env->ReleaseStringUTFChars(str.get(), bytes);
+    }
     return res;
   }
 
@@ -836,9 +904,13 @@ struct JNITraits<StringType>
     LocalRef<_jstring> str{static_cast<jstring>(env->CallObjectMethod(
       obj, methodID, JNITraits<typename std::decay<Args>::type>::toJavaValue(
                        env, std::forward<Args>(args)).data()...))};
-    const auto bytes = env->GetStringUTFChars(str.get(), nullptr);
-    value_type res{bytes};
-    env->ReleaseStringUTFChars(str.get(), bytes);
+    value_type res;
+    if (str)
+    {
+      const auto bytes = env->GetStringUTFChars(str.get(), nullptr);
+      res.assign(bytes);
+      env->ReleaseStringUTFChars(str.get(), bytes);
+    }
     return res;
   }
 
@@ -850,9 +922,13 @@ struct JNITraits<StringType>
       classID, methodID,
       JNITraits<typename std::decay<Args>::type>::toJavaValue(
         env, std::forward<Args>(args)).data()...))};
-    const auto bytes = env->GetStringUTFChars(str.get(), nullptr);
-    value_type res{bytes};
-    env->ReleaseStringUTFChars(str.get(), bytes);
+    value_type res;
+    if (str)
+    {
+      const auto bytes = env->GetStringUTFChars(str.get(), nullptr);
+      res.assign(bytes);
+      env->ReleaseStringUTFChars(str.get(), bytes);
+    }
     return res;
   }
 };
@@ -861,18 +937,18 @@ template <class T>
 struct JNITraits<
   T,
   typename std::enable_if<std::is_same<
-    decltype(std::declval<T&>().getJNIObjectHandle()), jobject>::value>::type>
+    decltype(std::declval<T&>().operator jobject()), jobject>::value>::type>
 {
   using value_type = T;
 
-  static std::string getSignature()
+  static std::string getQualifiedName()
   {
-    return T::getJNIClassName();
+    return T::qualified_name;
   }
 
   static ValueHolder<jobject> toJavaValue(JNIEnv* env, const T& arg)
   {
-    return ValueHolder<jobject>{arg.getJNIObjectHandle()};
+    return ValueHolder<jobject>{arg.operator jobject()};
   }
 
   static ArrayType<T> getArrayElements(JNIEnv* env, jobjectArray ary)
@@ -941,7 +1017,7 @@ struct JNITraits<ArrayType<BooleanType>>
 {
   using value_type = ArrayType<BooleanType>;
 
-  static std::string getSignature()
+  static std::string getQualifiedName()
   {
     return "[Z";
   }
@@ -1032,7 +1108,7 @@ struct JNITraits<ArrayType<ByteType>>
 {
   using value_type = ArrayType<ByteType>;
 
-  static std::string getSignature()
+  static std::string getQualifiedName()
   {
     return "[B";
   }
@@ -1118,7 +1194,7 @@ struct JNITraits<ArrayType<CharType>>
 {
   using value_type = ArrayType<CharType>;
 
-  static std::string getSignature()
+  static std::string getQualifiedName()
   {
     return "[C";
   }
@@ -1204,7 +1280,7 @@ struct JNITraits<ArrayType<ShortType>>
 {
   using value_type = ArrayType<ShortType>;
 
-  static std::string getSignature()
+  static std::string getQualifiedName()
   {
     return "[S";
   }
@@ -1290,7 +1366,7 @@ struct JNITraits<ArrayType<IntType>>
 {
   using value_type = ArrayType<IntType>;
 
-  static std::string getSignature()
+  static std::string getQualifiedName()
   {
     return "[I";
   }
@@ -1375,7 +1451,7 @@ struct JNITraits<ArrayType<LongType>>
 {
   using value_type = ArrayType<LongType>;
 
-  static std::string getSignature()
+  static std::string getQualifiedName()
   {
     return "[J";
   }
@@ -1461,7 +1537,7 @@ struct JNITraits<ArrayType<FloatType>>
 {
   using value_type = ArrayType<FloatType>;
 
-  static std::string getSignature()
+  static std::string getQualifiedName()
   {
     return "[F";
   }
@@ -1547,7 +1623,7 @@ struct JNITraits<ArrayType<DoubleType>>
 {
   using value_type = ArrayType<DoubleType>;
 
-  static std::string getSignature()
+  static std::string getQualifiedName()
   {
     return "[D";
   }
@@ -1634,7 +1710,7 @@ struct JNITraits<ArrayType<StringType>>
 {
   using value_type = ArrayType<StringType>;
 
-  static std::string getSignature()
+  static std::string getQualifiedName()
   {
     return "[java/lang/String;";
   }
@@ -1724,20 +1800,20 @@ template <class T>
 struct JNITraits<
   ArrayType<T>,
   typename std::enable_if<std::is_same<
-    decltype(std::declval<T&>().getJNIObjectHandle()), jobject>::value>::type>
+    decltype(std::declval<T&>().operator jobject()), jobject>::value>::type>
 {
   using value_type = ArrayType<T>;
 
-  static std::string getSignature()
+  static std::string getQualifiedName()
   {
-    return "[" + JNITraits<T>::getSignature();
+    return "[" + JNITraits<T>::getQualifiedName();
   }
 
   template <class Arg>
   static ValueHolder<LocalRef<_jobjectArray>> toJavaValue(JNIEnv* env,
                                                           Arg&& arg)
   {
-    LocalRef<_jclass> c{env->FindClass(JNITraits<T>::getSignature().c_str())};
+    LocalRef<_jclass> c{env->FindClass(JNITraits<T>::getQualifiedName().c_str())};
     auto ary = env->NewObjectArray(arg.size(), c.get(), 0);
     for (jsize i = 0; i < static_cast<jsize>(arg.size()); ++i)
     {
@@ -1817,9 +1893,9 @@ struct JNITraits<ArrayType<ArrayType<T>>>
 {
   using value_type = ArrayType<ArrayType<T>>;
 
-  static std::string getSignature()
+  static std::string getQualifiedName()
   {
-    return "[" + JNITraits<ArrayType<T>>::getSignature();
+    return "[" + JNITraits<ArrayType<T>>::getQualifiedName();
   }
 
   template <class Arg>
@@ -1827,7 +1903,7 @@ struct JNITraits<ArrayType<ArrayType<T>>>
                                                           Arg&& arg)
   {
     LocalRef<_jclass> c{
-      env->FindClass(JNITraits<ArrayType<T>>::getSignature().c_str())};
+      env->FindClass(JNITraits<ArrayType<T>>::getQualifiedName().c_str())};
     auto ary = env->NewObjectArray(arg.size(), c.get(), 0);
     for (jsize i = 0; i < static_cast<jsize>(arg.size()); ++i)
     {
@@ -2038,6 +2114,11 @@ inline R callStaticMethod(const char* className, const char* methodName,
 
   return detail::JNITraits<typename std::decay<R>::type>::callStaticMethod(
     env, classID.get(), methodID, std::forward<Args>(args)...);
+}
+
+inline constexpr std::size_t strlen(const char* s)
+{
+  return *s != '\0' ? 1 + strlen(s + 1) : 0;
 }
 
 } // namespace JNIHelper

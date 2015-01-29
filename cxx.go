@@ -1,9 +1,13 @@
 package main
 
 import (
+	"fmt"
 	"os/exec"
 	"regexp"
+	"strconv"
 	"strings"
+
+	"github.com/mtojo/go-java/java"
 )
 
 var cxxTypes = map[string]string{
@@ -236,4 +240,52 @@ func formatCxxFile(fname string) error {
 	cmd := exec.Command("clang-format", "-i",
 		"-assume-filename=\""+*clangFormatFile+"\"", fname)
 	return cmd.Run()
+}
+
+func quoteCxxString(str string) string {
+	return strconv.Quote(str)
+}
+
+func formatCxxConstant(c *java.ClassFile, attr *java.ConstantValueAttribute) *string {
+	if attr != nil {
+		constant := c.ConstantPool[attr.ConstantValueIndex-1]
+
+		switch constant.GetTag() {
+		case java.IntegerConstant:
+			v := fmt.Sprint(constant.Integer().Value)
+			return &v
+		case java.LongConstant:
+			v := fmt.Sprint(constant.Long().Value)
+			return &v
+		case java.FloatConstant:
+			v := fmt.Sprint(constant.Float().Value)
+			if v == "NaN" {
+				v = "std::numeric_limits<float>::quiet_NaN()"
+			} else if v == "+Inf" {
+				v = "+std::numeric_limits<float>::infinity()"
+			} else if v == "-Inf" {
+				v = "-std::numeric_limits<float>::infinity()"
+			}
+			return &v
+		case java.DoubleConstant:
+			v := fmt.Sprint(constant.Double().Value)
+			if v == "NaN" {
+				v = "std::numeric_limits<double>::quiet_NaN()"
+			} else if v == "+Inf" {
+				v = "+std::numeric_limits<double>::infinity()"
+			} else if v == "-Inf" {
+				v = "-std::numeric_limits<double>::infinity()"
+			}
+			return &v
+		case java.Utf8Constant:
+			v := quoteCxxString(constant.Utf8().Value)
+			return &v
+		case java.StringConstant:
+			v := quoteCxxString(
+				c.ConstantPool[constant.String().StringIndex-1].Utf8().Value)
+			return &v
+		}
+	}
+
+	return nil
 }

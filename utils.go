@@ -35,10 +35,18 @@ func filter(s []string, fn func(string) bool) []string {
 	return c
 }
 
+func snakeCase(s string) string {
+	chunks := upperCamelCaseRegex.FindAllString(s, -1)
+	for idx, val := range chunks {
+		chunks[idx] = strings.ToLower(val)
+	}
+	return strings.Join(chunks, "_")
+}
+
 func upperCamelCase(s string) string {
 	chunks := upperCamelCaseRegex.FindAllString(s, -1)
 	for idx, val := range chunks {
-		chunks[idx] = strings.Title(strings.ToLower(val))
+		chunks[idx] = strings.Title(val)
 	}
 	return strings.Join(chunks, "")
 }

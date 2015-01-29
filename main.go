@@ -38,7 +38,7 @@ func main() {
 	sourceExt = flag.String("c", "cpp", "source file extension")
 	incGuardPrefix = flag.String("p", "", "include guard prefix")
 	incGuardSuffix = flag.String("s", "", "include guard suffix")
-	namespacePrefix = flag.String("n", "", "namespace prefix")
+	namespacePrefix = flag.String("n", "j2n", "namespace prefix")
 	headerTemplateFile = flag.String("t", "", "header template file")
 	sourceTemplateFile = flag.String("u", "", "source template file")
 	clangFormatFile = flag.String("l", "", ".clang-format file")
@@ -105,7 +105,7 @@ func main() {
 				*headerExt,
 				*incGuardPrefix,
 				*incGuardSuffix,
-        splitString(*namespacePrefix, "::"),
+				splitString(*namespacePrefix, "::"),
 				cxxTypes,
 			},
 			fullName,
@@ -113,6 +113,7 @@ func main() {
 			className,
 			isFinal,
 			superClass,
+			nil,
 			nil,
 			nil,
 			nil,
@@ -128,21 +129,39 @@ func main() {
 			name := c.GetFieldName(field)
 			signature := c.GetFieldDescriptor(field)
 			typ := lookupCxxType(signature)
-			if fname := lookupCxxHeader(signature); fname != nil {
-				data.Dependencies = appendUnique(data.Dependencies, *fname)
-			}
-			isStatic := (field.AccessFlags & java.StaticField) > 0
-			isEnum := (field.AccessFlags & java.EnumField) > 0
-			isFinal := (field.AccessFlags & java.FinalField) > 0
 
-			data.Fields = append(data.Fields, FieldData{
-				name,
-				signature,
-				typ,
-				isStatic,
-				isEnum,
-				isFinal,
-			})
+			var constantValue *string
+			for _, attr := range field.Attributes {
+				constantValue = formatCxxConstant(c, attr.ConstantValueAttribute())
+				if constantValue != nil {
+					break
+				}
+			}
+
+			if constantValue != nil {
+				data.Constants = append(data.Constants, ConstantData{
+					name,
+					*constantValue,
+					typ,
+				})
+			} else {
+				if fname := lookupCxxHeader(signature); fname != nil {
+					data.Dependencies = appendUnique(data.Dependencies, *fname)
+				}
+
+				isStatic := (field.AccessFlags & java.StaticField) > 0
+				isEnum := (field.AccessFlags & java.EnumField) > 0
+				isFinal := (field.AccessFlags & java.FinalField) > 0
+
+				data.Fields = append(data.Fields, FieldData{
+					name,
+					signature,
+					typ,
+					isStatic,
+					isEnum,
+					isFinal,
+				})
+			}
 		}
 
 		// Read methods data.
@@ -304,7 +323,7 @@ func main() {
 				*headerExt,
 				*incGuardPrefix,
 				*incGuardSuffix,
-        splitString(*namespacePrefix, "::"),
+				splitString(*namespacePrefix, "::"),
 				cxxTypes,
 			}
 

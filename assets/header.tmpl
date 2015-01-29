@@ -6,13 +6,18 @@
 {{if .SuperClass}}
 {{$header := print "L" .SuperClass ";" | LookupHeader}}
 {{if $header}}
-#include <{{$header}}>
+#include <{{range .NamespacePrefix}}{{.}}/{{end}}{{$header}}>
 {{end}}
+{{end}}
+
+{{range .NamespacePrefix}}
+namespace {{.}}
+{
 {{end}}
 
 {{range .Dependencies}}
 {{$slice := Split . "/"}}
-{{$name := Back $slice | RemoveExt}}
+{{$name := Back $slice | TrimExt}}
 {{range $index, $element := PopBack $slice}}
 namespace {{.}}{{if IsReserved .}}_{{end}}
 {
@@ -21,11 +26,6 @@ class {{$name}}{{if IsReserved $name}}_{{end}};
 {{range $index, $element := PopBack $slice | Reverse}}
 } // namespace {{.}}{{if IsReserved .}}_{{end}}
 {{end}}
-{{end}}
-
-{{range .NamespacePrefix}}
-namespace {{.}}
-{
 {{end}}
 
 {{range (Split .PackageName "/")}}
@@ -44,14 +44,19 @@ private:
 {{end}}
 
 public:
-  static constexpr const char* getJNIClassName()
-  {
-    return "L{{.FullName}};";
-  }
+  static constexpr const char* qualified_name = "L{{.FullName}};";
+
+{{range .Constants}}
+  static constexpr {{if eq (.Type | TrimNamespace) "java::lang::String"}}const char*{{else}}{{.Type}}{{end}} {{.Name}} = {{.Value}};
+{{end}}
 
 {{if eq .FullName "java/lang/String"}}
-  String(const std::string& s);
+  String(const char* s) : String{s, JNIHelper::strlen(s)}
+  {
+  }
+
   String(const char* s, std::size_t count);
+  String(const std::string& s);
 {{end}}
 
 {{range .Initializers}}
@@ -86,7 +91,20 @@ public:
 {{end}}
 
 {{if not .SuperClass}}
-  jobject getJNIObjectHandle() const;
+  bool operator!() const
+  {
+    return this->obj_ == nullptr;
+  }
+
+  explicit operator bool() const
+  {
+    return this->obj_ != nullptr;
+  }
+
+  operator jobject() const
+  {
+    return this->obj_;
+  }
 {{end}}
 
 {{if eq .FullName "java/lang/String"}}

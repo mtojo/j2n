@@ -1,7 +1,7 @@
 #include <{{range .NamespacePrefix}}{{.}}/{{end}}{{.PackageName}}/{{ReplaceAll .ClassName "$" "_"}}.{{.HeaderExt}}>
 
 {{range .Dependencies}}
-#include <{{.}}>
+#include <{{range $.NamespacePrefix}}{{.}}/{{end}}{{.}}>
 {{end}}
 
 {{range .NamespacePrefix}}
@@ -15,13 +15,13 @@ namespace {{.}}{{if IsReserved .}}_{{end}}
 {{end}}
 
 {{if eq .FullName "java/lang/String"}}
-String::String(const std::string& s)
-  : String({{range $.NamespacePrefix}}{{.}}::{{end}}JNIHelper::detail::newString(s.c_str(), s.size()).get())
+String::String(const char* s, std::size_t count)
+  : String({{range $.NamespacePrefix}}{{.}}::{{end}}JNIHelper::detail::newString(s, count).get())
 {
 }
 
-String::String(const char* s, std::size_t count)
-  : String({{range $.NamespacePrefix}}{{.}}::{{end}}JNIHelper::detail::newString(s, count).get())
+String::String(const std::string& s)
+  : String({{range $.NamespacePrefix}}{{.}}::{{end}}JNIHelper::detail::newString(s.c_str(), s.size()).get())
 {
 }
 {{end}}
@@ -43,7 +43,7 @@ String::String(const char* s, std::size_t count)
 }
 {{else}}
 {{ReplaceAll .ClassName "$" "_"}}::{{ReplaceAll .ClassName "$" "_"}}(jobject obj)
-  : obj_({{range $.NamespacePrefix}}{{.}}::{{end}}JNIHelper::getJNIEnv()->NewGlobalRef(obj))
+  : obj_(obj != nullptr ? {{range $.NamespacePrefix}}{{.}}::{{end}}JNIHelper::getJNIEnv()->NewGlobalRef(obj) : nullptr)
 {
 }
 
@@ -106,13 +106,6 @@ void {{ReplaceAll $.ClassName "$" "_"}}::set{{.Name | UpperCamelCase}}Field({{if
 }
 {{end}}
 {{end}}
-{{end}}
-
-{{if not .SuperClass}}
-jobject {{ReplaceAll .ClassName "$" "_"}}::getJNIObjectHandle() const
-{
-  return this->obj_;
-}
 {{end}}
 
 {{if eq .FullName "java/lang/String"}}

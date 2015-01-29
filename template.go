@@ -16,6 +16,12 @@ type CommonData struct {
 	TypeMap         map[string]string
 }
 
+type ConstantData struct {
+	Name  string
+	Value string
+	Type  string
+}
+
 type FieldData struct {
 	Name      string
 	Signature string
@@ -42,6 +48,7 @@ type ClassData struct {
 	IsFinal      bool
 	SuperClass   string
 	Dependencies []string
+	Constants    []ConstantData
 	Initializers []MethodData
 	Fields       []FieldData
 	Methods      []MethodData
@@ -83,9 +90,6 @@ func makeTemplate(name, tpl string) *template.Template {
 		"PopFront": func(slice []string) []string {
 			return slice[1:]
 		},
-		"RemoveExt": func(fname string) string {
-			return strings.TrimSuffix(fname, filepath.Ext(fname))
-		},
 		"Replace": strings.Replace,
 		"ReplaceAll": func(s, o, n string) string {
 			return strings.Replace(s, o, n, -1)
@@ -97,9 +101,22 @@ func makeTemplate(name, tpl string) *template.Template {
 			}
 			return s
 		},
-		"Split":          splitString,
-		"ToLower":        strings.ToLower,
-		"ToUpper":        strings.ToUpper,
+    "SnakeCase": snakeCase,
+		"Split":   splitString,
+		"ToLower": strings.ToLower,
+		"ToUpper": strings.ToUpper,
+		"TrimExt": func(fname string) string {
+			return strings.TrimSuffix(fname, filepath.Ext(fname))
+		},
+		"TrimNamespace": func(s string) string {
+			return strings.TrimPrefix(s, *namespacePrefix+"::")
+		},
+		"TrimPrefix": func(s, prefix string) string {
+			return strings.TrimPrefix(s, prefix)
+		},
+		"TrimSuffix": func(s, suffix string) string {
+			return strings.TrimSuffix(s, suffix)
+		},
 		"UpperCamelCase": upperCamelCase,
 	})
 	template.Must(t.Parse(tpl))
