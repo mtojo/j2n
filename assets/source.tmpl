@@ -77,30 +77,30 @@ String::String(const std::string& s)
 
 {{range .Fields}}
 {{if .IsEnum}}
-{{ReplaceAll .Type "$" "_"}} {{ReplaceAll $.ClassName "$" "_"}}::get{{.Name | UpperCamelCase}}EnumField()
+{{ReplaceAll .Type "$" "_"}} {{ReplaceAll $.ClassName "$" "_"}}::get{{.Name | SnakeCase | UpperCamelCase}}EnumField()
 {
   return {{range $.NamespacePrefix}}{{.}}::{{end}}JNIHelper::getStaticField<{{ReplaceAll .Type "$" "_"}}>("{{$.PackageName}}/{{$.ClassName}}", "{{.Name}}", "{{.Signature}}");
 }
 {{else}}
 {{if .IsStatic}}
 {{if not .IsFinal}}
-void {{ReplaceAll $.ClassName "$" "_"}}::set{{.Name | UpperCamelCase}}StaticField({{if IsPrimitive .Type}}{{.Type}}{{else}}const {{ReplaceAll .Type "$" "_"}}&{{end}} x)
+void {{ReplaceAll $.ClassName "$" "_"}}::set{{.Name | SnakeCase | UpperCamelCase}}StaticField({{if IsPrimitive .Type}}{{.Type}}{{else}}const {{ReplaceAll .Type "$" "_"}}&{{end}} x)
 {
   {{range $.NamespacePrefix}}{{.}}::{{end}}JNIHelper::setStaticField("{{$.PackageName}}/{{$.ClassName}}", "{{.Name}}", "{{.Signature}}", x);
 }
 {{end}}
-{{ReplaceAll .Type "$" "_"}} {{ReplaceAll $.ClassName "$" "_"}}::get{{.Name | UpperCamelCase}}StaticField()
+{{ReplaceAll .Type "$" "_"}} {{ReplaceAll $.ClassName "$" "_"}}::get{{.Name | SnakeCase | UpperCamelCase}}StaticField()
 {
   return {{range $.NamespacePrefix}}{{.}}::{{end}}JNIHelper::getStaticField<{{ReplaceAll .Type "$" "_"}}>("{{$.PackageName}}/{{$.ClassName}}", "{{.Name}}", "{{.Signature}}");
 }
 {{else}}
 {{if not .IsFinal}}
-void {{ReplaceAll $.ClassName "$" "_"}}::set{{.Name | UpperCamelCase}}Field({{if IsPrimitive .Type}}{{.Type}}{{else}}const {{ReplaceAll .Type "$" "_"}}&{{end}} x)
+void {{ReplaceAll $.ClassName "$" "_"}}::set{{.Name | SnakeCase | UpperCamelCase}}Field({{if IsPrimitive .Type}}{{.Type}}{{else}}const {{ReplaceAll .Type "$" "_"}}&{{end}} x)
 {
   {{range $.NamespacePrefix}}{{.}}::{{end}}JNIHelper::setField(this->obj_, "{{.Name}}", "{{.Signature}}", x);
 }
 {{end}}
-{{ReplaceAll .Type "$" "_"}} {{ReplaceAll $.ClassName "$" "_"}}::get{{.Name | UpperCamelCase}}Field() const
+{{ReplaceAll .Type "$" "_"}} {{ReplaceAll $.ClassName "$" "_"}}::get{{.Name | SnakeCase | UpperCamelCase}}Field() const
 {
   return {{range $.NamespacePrefix}}{{.}}::{{end}}JNIHelper::getField<{{ReplaceAll .Type "$" "_"}}>(this->obj_, "{{.Name}}", "{{.Signature}}");
 }

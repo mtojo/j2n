@@ -81,12 +81,12 @@ public:
 
 {{range .Fields}}
 {{if .IsEnum}}
-  static {{ReplaceAll .Type "$" "_"}} get{{.Name | UpperCamelCase}}EnumField();
+  static {{ReplaceAll .Type "$" "_"}} get{{.Name | SnakeCase | UpperCamelCase}}EnumField();
 {{else}}
 {{if not .IsFinal}}
-  {{if .IsStatic}}static {{end}}void set{{.Name | UpperCamelCase}}{{if .IsStatic}}Static{{end}}Field({{if IsPrimitive .Type}}{{.Type}}{{else}}const {{range (Split (Dir .Type) "::")}}{{.}}{{if IsReserved .}}_{{end}}::{{end}}{{ReplaceAll .Type "$" "_"}}&{{end}} x);
+  {{if .IsStatic}}static {{end}}void set{{.Name | SnakeCase | UpperCamelCase}}{{if .IsStatic}}Static{{end}}Field({{if IsPrimitive .Type}}{{.Type}}{{else}}const {{range (Split (Dir .Type) "::")}}{{.}}{{if IsReserved .}}_{{end}}::{{end}}{{ReplaceAll .Type "$" "_"}}&{{end}} x);
 {{end}}
-  {{if .IsStatic}}static {{end}}{{ReplaceAll .Type "$" "_"}} get{{.Name | UpperCamelCase}}{{if .IsStatic}}Static{{end}}Field(){{if not .IsStatic}} const{{end}};
+  {{if .IsStatic}}static {{end}}{{ReplaceAll .Type "$" "_"}} get{{.Name | SnakeCase | UpperCamelCase}}{{if .IsStatic}}Static{{end}}Field(){{if not .IsStatic}} const{{end}};
 {{end}}
 {{end}}
 
