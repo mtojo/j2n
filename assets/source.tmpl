@@ -1,7 +1,7 @@
 #include <{{range .NamespacePrefix}}{{.}}/{{end}}{{.PackageName}}/{{ReplaceAll .ClassName "$" "_"}}.{{.HeaderExt}}>
 
 {{range .Dependencies}}
-#include <{{range $.NamespacePrefix}}{{.}}/{{end}}{{.}}>
+#include <{{range $.NamespacePrefix}}{{.}}/{{end}}{{ReplaceAll . "$" "_"}}.{{$.HeaderExt}}>
 {{end}}
 
 {{range .NamespacePrefix}}

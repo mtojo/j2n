@@ -29,6 +29,149 @@ var (
 	clangFormatFile    *string
 )
 
+func readJar(jarFile string) map[string]ClassData {
+	result := make(map[string]ClassData)
+
+	err := java.ReadJarFile(jarFile, func(fname string, c *java.ClassFile) {
+		// Read class file data.
+		fullName := c.GetClassName()
+		packageName := fullName[0:strings.LastIndex(fullName, "/")]
+		className := fullName[strings.LastIndex(fullName, "/")+1:]
+		isFinal := (c.AccessFlags & java.FinalClass) > 0
+		superClass := c.GetSuperClassName()
+
+		data := ClassData{
+			CommonData{
+				fname,
+				*headerExt,
+				*incGuardPrefix,
+				*incGuardSuffix,
+				splitString(*namespacePrefix, "::"),
+				cxxTypes,
+			},
+			fullName,
+			packageName,
+			className,
+			isFinal,
+			superClass,
+			nil,
+			nil,
+			nil,
+			nil,
+			nil,
+		}
+
+		// Read fields data.
+		for _, field := range c.Fields {
+			if (field.AccessFlags & java.PublicField) == 0 {
+				continue
+			}
+
+			name := c.GetFieldName(field)
+			signature := c.GetFieldDescriptor(field)
+			typ := lookupCxxType(signature)
+
+			var constantValue *string
+			for _, attr := range field.Attributes {
+				constantValue = formatCxxConstant(c, attr.ConstantValueAttribute())
+				if constantValue != nil {
+					break
+				}
+			}
+
+			if constantValue != nil {
+				data.Constants = append(data.Constants, ConstantData{
+					name,
+					*constantValue,
+					typ,
+				})
+			} else {
+				if isClassSignature(signature) {
+					data.Dependencies = appendUnique(data.Dependencies,
+						getClassName(signature))
+				}
+
+				isStatic := (field.AccessFlags & java.StaticField) > 0
+				isEnum := (field.AccessFlags & java.EnumField) > 0
+				isFinal := (field.AccessFlags & java.FinalField) > 0
+
+				data.Fields = append(data.Fields, FieldData{
+					name,
+					signature,
+					typ,
+					isStatic,
+					isEnum,
+					isFinal,
+				})
+			}
+		}
+
+		// Read methods data.
+	L:
+		for _, method := range c.Methods {
+			if (method.AccessFlags&java.PublicMethod) == 0 ||
+				c.IsStaticInitializer(method) || c.IsNativeMethod(method) {
+				continue
+			}
+
+			name := c.GetMethodName(method)
+			signature := c.GetMethodDescriptor(method)
+			ret, args := parseMethodSignature(signature)
+			returnType := lookupCxxType(ret)
+			if isClassSignature(ret) {
+				data.Dependencies = appendUnique(data.Dependencies, getClassName(ret))
+			}
+			var argumentTypes []string
+			for _, arg := range args {
+				argumentTypes = append(argumentTypes, lookupCxxType(arg))
+				if isClassSignature(arg) {
+					data.Dependencies = appendUnique(data.Dependencies, getClassName(arg))
+				}
+			}
+
+			// Prevent return type overloading.
+			for _, m := range data.Methods {
+				if name == m.Name && reflect.DeepEqual(argumentTypes, m.ArgumentTypes) {
+					continue L
+				}
+			}
+
+			isAbstractMethod := (method.AccessFlags & java.AbstractMethod) > 0
+			isStaticMethod := (method.AccessFlags & java.StaticMethod) > 0
+
+			methodData := MethodData{
+				name,
+				signature,
+				returnType,
+				argumentTypes,
+				isAbstractMethod,
+				isStaticMethod,
+			}
+
+			if c.IsInitializer(method) {
+				data.Initializers = append(data.Initializers, methodData)
+			} else {
+				data.Methods = append(data.Methods, methodData)
+			}
+		}
+
+		data.Dependencies = filter(data.Dependencies, func(dep string) bool {
+			return dep != fullName
+		})
+
+		sort.Sort(sort.StringSlice(data.Dependencies))
+
+		result[fullName] = data
+	})
+
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "failed to read jar file:", err)
+		os.Exit(1)
+	}
+
+	return result
+}
+
 func main() {
 	// Configurations.
 	jarFile = flag.String("i", "", "input jar file")
@@ -91,138 +234,11 @@ func main() {
 	}
 
 	// Read android.jar file, and write C++ header files.
-	err := java.ReadJarFile(*jarFile, func(fname string, c *java.ClassFile) {
-		// Read class file data.
-		fullName := c.GetClassName()
-		packageName := fullName[0:strings.LastIndex(fullName, "/")]
-		className := fullName[strings.LastIndex(fullName, "/")+1:]
-		isFinal := (c.AccessFlags & java.FinalClass) > 0
-		superClass := c.GetSuperClassName()
+	classes := readJar(*jarFile)
 
-		data := ClassData{
-			CommonData{
-				fname,
-				*headerExt,
-				*incGuardPrefix,
-				*incGuardSuffix,
-				splitString(*namespacePrefix, "::"),
-				cxxTypes,
-			},
-			fullName,
-			packageName,
-			className,
-			isFinal,
-			superClass,
-			nil,
-			nil,
-			nil,
-			nil,
-			nil,
-		}
-
-		// Read fields data.
-		for _, field := range c.Fields {
-			if (field.AccessFlags & java.PublicField) == 0 {
-				continue
-			}
-
-			name := c.GetFieldName(field)
-			signature := c.GetFieldDescriptor(field)
-			typ := lookupCxxType(signature)
-
-			var constantValue *string
-			for _, attr := range field.Attributes {
-				constantValue = formatCxxConstant(c, attr.ConstantValueAttribute())
-				if constantValue != nil {
-					break
-				}
-			}
-
-			if constantValue != nil {
-				data.Constants = append(data.Constants, ConstantData{
-					name,
-					*constantValue,
-					typ,
-				})
-			} else {
-				if fname := lookupCxxHeader(signature); fname != nil {
-					data.Dependencies = appendUnique(data.Dependencies, *fname)
-				}
-
-				isStatic := (field.AccessFlags & java.StaticField) > 0
-				isEnum := (field.AccessFlags & java.EnumField) > 0
-				isFinal := (field.AccessFlags & java.FinalField) > 0
-
-				data.Fields = append(data.Fields, FieldData{
-					name,
-					signature,
-					typ,
-					isStatic,
-					isEnum,
-					isFinal,
-				})
-			}
-		}
-
-		// Read methods data.
-	L:
-		for _, method := range c.Methods {
-			if (method.AccessFlags&java.PublicMethod) == 0 ||
-				c.IsStaticInitializer(method) || c.IsNativeMethod(method) {
-				continue
-			}
-
-			name := c.GetMethodName(method)
-			signature := c.GetMethodDescriptor(method)
-			ret, args := parseMethodSignature(signature)
-			returnType := lookupCxxType(ret)
-			if fname := lookupCxxHeader(ret); fname != nil {
-				data.Dependencies = appendUnique(data.Dependencies, *fname)
-			}
-			var argumentTypes []string
-			for _, arg := range args {
-				argumentTypes = append(argumentTypes, lookupCxxType(arg))
-				if fname := lookupCxxHeader(arg); fname != nil {
-					data.Dependencies = appendUnique(data.Dependencies, *fname)
-				}
-			}
-
-			// Prevent return type overloading.
-			for _, m := range data.Methods {
-				if name == m.Name && reflect.DeepEqual(argumentTypes, m.ArgumentTypes) {
-					continue L
-				}
-			}
-
-			isAbstractMethod := (method.AccessFlags & java.AbstractMethod) > 0
-			isStaticMethod := (method.AccessFlags & java.StaticMethod) > 0
-
-			methodData := MethodData{
-				name,
-				signature,
-				returnType,
-				argumentTypes,
-				isAbstractMethod,
-				isStaticMethod,
-			}
-
-			if c.IsInitializer(method) {
-				data.Initializers = append(data.Initializers, methodData)
-			} else {
-				data.Methods = append(data.Methods, methodData)
-			}
-		}
-
-		headerFile := *lookupCxxHeader("L" + fullName + ";")
-
-		data.Dependencies = filter(data.Dependencies, func(fname string) bool {
-			return fname != headerFile
-		})
-
-		sort.Sort(sort.StringSlice(data.Dependencies))
-
+	for _, data := range classes {
 		// Write C++ header file.
-		headerFile = path.Join(*outDir, headerFile)
+		headerFile := path.Join(*outDir, *lookupCxxHeader("L" + data.FullName + ";"))
 
 		if !*forceOutput {
 			if _, err := os.Stat(headerFile); !os.IsNotExist(err) {
@@ -242,9 +258,11 @@ func main() {
 				fmt.Fprintf(os.Stderr, "failed to create output file: %s\n", headerFile)
 				os.Exit(1)
 			}
-			defer out.Close()
 
-			if err := header.Execute(out, data); err != nil {
+			err = header.Execute(out, data)
+			out.Close()
+
+			if err != nil {
 				fmt.Fprintln(os.Stderr, "failed to write output file:", err)
 				os.Exit(1)
 			}
@@ -277,9 +295,11 @@ func main() {
 					fmt.Fprintf(os.Stderr, "failed to create output file: %s\n", sourceFile)
 					os.Exit(1)
 				}
-				defer out.Close()
 
-				if err := source.Execute(out, data); err != nil {
+				err = source.Execute(out, data)
+				out.Close()
+
+				if err != nil {
 					fmt.Fprintln(os.Stderr, "failed to write output file:", err)
 					os.Exit(1)
 				}
@@ -290,11 +310,6 @@ func main() {
 				os.Exit(1)
 			}
 		}
-	})
-
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "failed to read jar file:", err)
-		os.Exit(1)
 	}
 
 	// Write common C++ header file if default template is used.

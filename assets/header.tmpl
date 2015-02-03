@@ -17,12 +17,12 @@ namespace {{.}}
 
 {{range .Dependencies}}
 {{$slice := Split . "/"}}
-{{$name := Back $slice | TrimExt}}
+{{$name := Back $slice}}
 {{range $index, $element := PopBack $slice}}
 namespace {{.}}{{if IsReserved .}}_{{end}}
 {
 {{end}}
-class {{$name}}{{if IsReserved $name}}_{{end}};
+class {{ReplaceAll $name "$" "_"}}{{if IsReserved $name}}_{{end}};
 {{range $index, $element := PopBack $slice | Reverse}}
 } // namespace {{.}}{{if IsReserved .}}_{{end}}
 {{end}}
@@ -47,7 +47,7 @@ public:
   static constexpr const char* qualified_name = "L{{.FullName}};";
 
 {{range .Constants}}
-  static constexpr {{if eq (.Type | TrimNamespace) "java::lang::String"}}const char*{{else}}{{.Type}}{{end}} {{.Name}} = {{.Value}};
+  static constexpr {{if eq (.Type | TrimNamespace) "java::lang::String"}}const char*{{else}}{{.Type}}{{end}} {{.Name}}{{if IsReserved .Name}}_{{end}} = {{.Value}};
 {{end}}
 
 {{if eq .FullName "java/lang/String"}}

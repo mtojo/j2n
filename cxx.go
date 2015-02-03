@@ -50,6 +50,8 @@ var cxxPrimitives = []string{
 }
 
 var cxxReservedKeywords = []string{
+	"NULL",
+  "PAGE_SIZE",
 	"alignas",
 	"alignof",
 	"and",
@@ -136,6 +138,38 @@ var cxxReservedKeywords = []string{
 	"while",
 	"xor",
 	"xor_eq",
+}
+
+func isClassSignature(jType string) bool {
+	if t, ok := cxxTypes[jType]; ok {
+		jType = t
+	}
+
+	if jType[0] == '[' {
+		return isClassSignature(jType[1:])
+	}
+
+	if jType[0] == 'L' {
+    return true
+	}
+
+	return false
+}
+
+func getClassName(jType string) string {
+	if t, ok := cxxTypes[jType]; ok {
+		jType = t
+	}
+
+	if jType[0] == '[' {
+		return getClassName(jType[1:])
+	}
+
+	if jType[0] == 'L' {
+    return jType[1:len(jType)-1]
+	}
+
+	return ""
 }
 
 func isCxxPrimitive(s string) bool {

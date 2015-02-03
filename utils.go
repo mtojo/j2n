@@ -8,12 +8,19 @@ import (
 
 var upperCamelCaseRegex = regexp.MustCompile("[A-Z]*[0-9a-z]*")
 
-func appendUnique(slice []string, s string) []string {
+func inSlice(slice []string, s string) bool {
 	for _, elem := range slice {
 		if elem == s {
-			return slice
+			return true
 		}
 	}
+	return false
+}
+
+func appendUnique(slice []string, s string) []string {
+  if inSlice(slice, s) {
+    return slice
+  }
 	return append(slice, s)
 }
 
