@@ -238,7 +238,7 @@ struct JNITraits<BooleanType>
   static value_type callStaticMethod(JNIEnv* env, jclass classID,
                                      jmethodID methodID, Args&&... args)
   {
-    return static_cast<value_type>(env->CallBooleanMethod(
+    return static_cast<value_type>(env->CallStaticBooleanMethod(
       classID, methodID,
       JNITraits<typename std::decay<Args>::type>::toJavaValue(
         env, std::forward<Args>(args)).data()...));
@@ -311,7 +311,7 @@ struct JNITraits<ByteType>
   static value_type callStaticMethod(JNIEnv* env, jclass classID,
                                      jmethodID methodID, Args&&... args)
   {
-    return static_cast<value_type>(env->CallByteMethod(
+    return static_cast<value_type>(env->CallStaticByteMethod(
       classID, methodID,
       JNITraits<typename std::decay<Args>::type>::toJavaValue(
         env, std::forward<Args>(args)).data()...));
@@ -384,7 +384,7 @@ struct JNITraits<CharType>
   static value_type callStaticMethod(JNIEnv* env, jclass classID,
                                      jmethodID methodID, Args&&... args)
   {
-    return static_cast<value_type>(env->CallCharMethod(
+    return static_cast<value_type>(env->CallStaticCharMethod(
       classID, methodID,
       JNITraits<typename std::decay<Args>::type>::toJavaValue(
         env, std::forward<Args>(args)).data()...));
@@ -457,7 +457,7 @@ struct JNITraits<ShortType>
   static value_type callStaticMethod(JNIEnv* env, jclass classID,
                                      jmethodID methodID, Args&&... args)
   {
-    return static_cast<value_type>(env->CallShortMethod(
+    return static_cast<value_type>(env->CallStaticShortMethod(
       classID, methodID,
       JNITraits<typename std::decay<Args>::type>::toJavaValue(
         env, std::forward<Args>(args)).data()...));
@@ -530,7 +530,7 @@ struct JNITraits<IntType>
   static value_type callStaticMethod(JNIEnv* env, jclass classID,
                                      jmethodID methodID, Args&&... args)
   {
-    return static_cast<value_type>(env->CallIntMethod(
+    return static_cast<value_type>(env->CallStaticIntMethod(
       classID, methodID,
       JNITraits<typename std::decay<Args>::type>::toJavaValue(
         env, std::forward<Args>(args)).data()...));
@@ -603,7 +603,7 @@ struct JNITraits<LongType>
   static value_type callStaticMethod(JNIEnv* env, jclass classID,
                                      jmethodID methodID, Args&&... args)
   {
-    return static_cast<value_type>(env->CallLongMethod(
+    return static_cast<value_type>(env->CallStaticLongMethod(
       classID, methodID,
       JNITraits<typename std::decay<Args>::type>::toJavaValue(
         env, std::forward<Args>(args)).data()...));
@@ -702,7 +702,7 @@ struct JNITraits<FloatType>
   static value_type callStaticMethod(JNIEnv* env, jclass classID,
                                      jmethodID methodID, Args&&... args)
   {
-    return static_cast<value_type>(env->CallFloatMethod(
+    return static_cast<value_type>(env->CallStaticFloatMethod(
       classID, methodID,
       JNITraits<typename std::decay<Args>::type>::toJavaValue(
         env, std::forward<Args>(args)).data()...));
@@ -801,7 +801,7 @@ struct JNITraits<DoubleType>
   static value_type callStaticMethod(JNIEnv* env, jclass classID,
                                      jmethodID methodID, Args&&... args)
   {
-    return static_cast<value_type>(env->CallDoubleMethod(
+    return static_cast<value_type>(env->CallStaticDoubleMethod(
       classID, methodID,
       JNITraits<typename std::decay<Args>::type>::toJavaValue(
         env, std::forward<Args>(args)).data()...));
