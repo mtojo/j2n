@@ -21,8 +21,8 @@ var (
 	outDir             *string
 	headerExt          *string
 	sourceExt          *string
-	incGuardPrefix     *string
-	incGuardSuffix     *string
+	macroPrefix        *string
+	macroSuffix        *string
 	namespacePrefix    *string
 	headerTemplateFile *string
 	sourceTemplateFile *string
@@ -44,8 +44,8 @@ func readJar(jarFile string) map[string]ClassData {
 			CommonData{
 				fname,
 				*headerExt,
-				*incGuardPrefix,
-				*incGuardSuffix,
+				*macroPrefix,
+				*macroSuffix,
 				splitString(*namespacePrefix, "::"),
 				cxxTypes,
 			},
@@ -179,8 +179,8 @@ func main() {
 	forceOutput = flag.Bool("f", false, "force output")
 	headerExt = flag.String("x", "hpp", "header file extension")
 	sourceExt = flag.String("c", "cpp", "source file extension")
-	incGuardPrefix = flag.String("p", "", "include guard prefix")
-	incGuardSuffix = flag.String("s", "", "include guard suffix")
+	macroPrefix = flag.String("p", "J2N_", "macro prefix")
+	macroSuffix = flag.String("s", "", "macro suffix")
 	namespacePrefix = flag.String("n", "j2n", "namespace prefix")
 	headerTemplateFile = flag.String("t", "", "header template file")
 	sourceTemplateFile = flag.String("u", "", "source template file")
@@ -336,8 +336,8 @@ func main() {
 			data := CommonData{
 				outFile,
 				*headerExt,
-				*incGuardPrefix,
-				*incGuardSuffix,
+				*macroPrefix,
+				*macroSuffix,
 				splitString(*namespacePrefix, "::"),
 				cxxTypes,
 			}

@@ -19,8 +19,8 @@ Options:
     -f             overwrite output directory if already exists
     -x <ext>       header file extension (default: .hpp)
     -c <ext>       source file extension (default: .cpp)
-    -p <prefix>    include guard prefix
-    -s <suffix>    include guard suffix
+    -p <prefix>    macro prefix
+    -s <suffix>    macro suffix
     -n <namespace> namespace prefix
     -t <file>      header template file
     -u <file>      source template file

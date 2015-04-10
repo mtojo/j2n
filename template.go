@@ -10,8 +10,8 @@ import (
 type CommonData struct {
 	Filename        string
 	HeaderExt       string
-	IncGuardPrefix  string
-	IncGuardSuffix  string
+	MacroPrefix     string
+	MacroSuffix     string
 	NamespacePrefix []string
 	TypeMap         map[string]string
 }
@@ -101,10 +101,10 @@ func makeTemplate(name, tpl string) *template.Template {
 			}
 			return s
 		},
-    "SnakeCase": snakeCase,
-		"Split":   splitString,
-		"ToLower": strings.ToLower,
-		"ToUpper": strings.ToUpper,
+		"SnakeCase": snakeCase,
+		"Split":     splitString,
+		"ToLower":   strings.ToLower,
+		"ToUpper":   strings.ToUpper,
 		"TrimExt": func(fname string) string {
 			return strings.TrimSuffix(fname, filepath.Ext(fname))
 		},

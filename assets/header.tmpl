@@ -1,5 +1,5 @@
-#ifndef {{.IncGuardPrefix}}{{range .NamespacePrefix}}{{. | ToUpper}}_{{end}}{{range (Split .PackageName "/")}}{{. | ToUpper}}_{{end}}{{ReplaceAll .ClassName "$" "_" | ToUpper}}_{{.HeaderExt | ToUpper}}{{.IncGuardSuffix}}
-#define {{.IncGuardPrefix}}{{range .NamespacePrefix}}{{. | ToUpper}}_{{end}}{{range (Split .PackageName "/")}}{{. | ToUpper}}_{{end}}{{ReplaceAll .ClassName "$" "_" | ToUpper}}_{{.HeaderExt | ToUpper}}{{.IncGuardSuffix}}
+#ifndef {{.MacroPrefix}}{{range .NamespacePrefix}}{{. | ToUpper}}_{{end}}{{range (Split .PackageName "/")}}{{. | ToUpper}}_{{end}}{{ReplaceAll .ClassName "$" "_" | ToUpper}}_{{.HeaderExt | ToUpper}}{{.MacroSuffix}}
+#define {{.MacroPrefix}}{{range .NamespacePrefix}}{{. | ToUpper}}_{{end}}{{range (Split .PackageName "/")}}{{. | ToUpper}}_{{end}}{{ReplaceAll .ClassName "$" "_" | ToUpper}}_{{.HeaderExt | ToUpper}}{{.MacroSuffix}}
 
 #include <{{range .NamespacePrefix}}{{.}}/{{end}}common.{{.HeaderExt}}>
 
@@ -127,4 +127,4 @@ protected:
 } // namespace {{.}}
 {{end}}
 
-#endif // {{.IncGuardPrefix}}{{range .NamespacePrefix}}{{. | ToUpper}}_{{end}}{{range (Split .PackageName "/")}}{{. | ToUpper}}_{{end}}{{ReplaceAll .ClassName "$" "_" | ToUpper}}_{{.HeaderExt | ToUpper}}{{.IncGuardSuffix}}
+#endif // {{.MacroPrefix}}{{range .NamespacePrefix}}{{. | ToUpper}}_{{end}}{{range (Split .PackageName "/")}}{{. | ToUpper}}_{{end}}{{ReplaceAll .ClassName "$" "_" | ToUpper}}_{{.HeaderExt | ToUpper}}{{.MacroSuffix}}

@@ -4,6 +4,10 @@
 #include <{{range $.NamespacePrefix}}{{.}}/{{end}}{{ReplaceAll . "$" "_"}}.{{$.HeaderExt}}>
 {{end}}
 
+#ifndef {{.MacroPrefix}}INLINE
+#define {{.MacroPrefix}}INLINE
+#endif
+
 {{range .NamespacePrefix}}
 namespace {{.}}
 {
@@ -15,44 +19,44 @@ namespace {{.}}{{if IsReserved .}}_{{end}}
 {{end}}
 
 {{if eq .FullName "java/lang/String"}}
-String::String(const char* s, std::size_t count)
+{{$.MacroPrefix}}INLINE String::String(const char* s, std::size_t count)
   : String({{range $.NamespacePrefix}}{{.}}::{{end}}JNIHelper::detail::newString(s, count).get())
 {
 }
 
-String::String(const std::string& s)
+{{$.MacroPrefix}}INLINE String::String(const std::string& s)
   : String({{range $.NamespacePrefix}}{{.}}::{{end}}JNIHelper::detail::newString(s.c_str(), s.size()).get())
 {
 }
 {{end}}
 
 {{range .Initializers}}
-{{ReplaceAll $.ClassName "$" "_"}}::{{ReplaceAll $.ClassName "$" "_"}}({{range $index, $element := .ArgumentTypes}}{{if $index}}, {{end}}{{if IsPrimitive $element}}{{$element}}{{else}}const {{ReplaceAll $element "$" "_"}}&{{end}} _{{$index}}{{end}})
+{{$.MacroPrefix}}INLINE {{ReplaceAll $.ClassName "$" "_"}}::{{ReplaceAll $.ClassName "$" "_"}}({{range $index, $element := .ArgumentTypes}}{{if $index}}, {{end}}{{if IsPrimitive $element}}{{$element}}{{else}}const {{ReplaceAll $element "$" "_"}}&{{end}} _{{$index}}{{end}})
   : {{ReplaceAll $.ClassName "$" "_"}}({{range $.NamespacePrefix}}{{.}}::{{end}}JNIHelper::detail::newObject("{{$.PackageName}}/{{$.ClassName}}", "{{.Signature}}"{{range $index, $element := .ArgumentTypes}}, _{{$index}}{{end}}).get())
 {
 }
 {{end}}
 
 {{if .SuperClass}}
-{{ReplaceAll .ClassName "$" "_"}}::{{ReplaceAll .ClassName "$" "_"}}(jobject obj) : base_type(obj)
+{{$.MacroPrefix}}INLINE {{ReplaceAll .ClassName "$" "_"}}::{{ReplaceAll .ClassName "$" "_"}}(jobject obj) : base_type(obj)
 {
 }
 
-{{ReplaceAll .ClassName "$" "_"}}::{{ReplaceAll .ClassName "$" "_"}}({{ReplaceAll .ClassName "$" "_"}}&& other) noexcept : base_type(std::move(other))
+{{$.MacroPrefix}}INLINE {{ReplaceAll .ClassName "$" "_"}}::{{ReplaceAll .ClassName "$" "_"}}({{ReplaceAll .ClassName "$" "_"}}&& other) noexcept : base_type(std::move(other))
 {
 }
 {{else}}
-{{ReplaceAll .ClassName "$" "_"}}::{{ReplaceAll .ClassName "$" "_"}}(jobject obj)
+{{$.MacroPrefix}}INLINE {{ReplaceAll .ClassName "$" "_"}}::{{ReplaceAll .ClassName "$" "_"}}(jobject obj)
   : obj_(obj != nullptr ? {{range $.NamespacePrefix}}{{.}}::{{end}}JNIHelper::getJNIEnv()->NewGlobalRef(obj) : nullptr)
 {
 }
 
-{{ReplaceAll .ClassName "$" "_"}}::{{ReplaceAll .ClassName "$" "_"}}({{ReplaceAll .ClassName "$" "_"}}&& other) noexcept : obj_(other.obj_)
+{{$.MacroPrefix}}INLINE {{ReplaceAll .ClassName "$" "_"}}::{{ReplaceAll .ClassName "$" "_"}}({{ReplaceAll .ClassName "$" "_"}}&& other) noexcept : obj_(other.obj_)
 {
   other.obj_ = nullptr;
 }
 
-{{ReplaceAll .ClassName "$" "_"}}::~{{ReplaceAll .ClassName "$" "_"}}()
+{{$.MacroPrefix}}INLINE {{ReplaceAll .ClassName "$" "_"}}::~{{ReplaceAll .ClassName "$" "_"}}()
 {
   if (this->obj_ != nullptr)
   {
@@ -63,12 +67,12 @@ String::String(const std::string& s)
 
 {{range .Methods}}
 {{if .IsStatic}}
-{{ReplaceAll .ReturnType "$" "_"}} {{ReplaceAll $.ClassName "$" "_"}}::{{.Name}}{{if IsReserved .Name}}_{{end}}({{range $index, $element := .ArgumentTypes}}{{if $index}}, {{end}}{{if IsPrimitive $element}}{{$element}}{{else}}const {{ReplaceAll $element "$" "_"}}&{{end}} _{{$index}}{{end}})
+{{$.MacroPrefix}}INLINE {{ReplaceAll .ReturnType "$" "_"}} {{ReplaceAll $.ClassName "$" "_"}}::{{.Name}}{{if IsReserved .Name}}_{{end}}({{range $index, $element := .ArgumentTypes}}{{if $index}}, {{end}}{{if IsPrimitive $element}}{{$element}}{{else}}const {{ReplaceAll $element "$" "_"}}&{{end}} _{{$index}}{{end}})
 {
   {{if ne .ReturnType "void"}}return {{end}}{{range $.NamespacePrefix}}{{.}}::{{end}}JNIHelper::callStaticMethod<{{ReplaceAll .ReturnType "$" "_"}}>("{{$.PackageName}}/{{$.ClassName}}", "{{.Name}}", "{{.Signature}}"{{range $index, $element := .ArgumentTypes}}, _{{$index}}{{end}});
 }
 {{else}}
-{{ReplaceAll .ReturnType "$" "_"}} {{ReplaceAll $.ClassName "$" "_"}}::{{.Name}}{{if IsReserved .Name}}_{{end}}({{range $index, $element := .ArgumentTypes}}{{if $index}}, {{end}}{{if IsPrimitive $element}}{{$element}}{{else}}const {{ReplaceAll $element "$" "_"}}&{{end}} _{{$index}}{{end}})
+{{$.MacroPrefix}}INLINE {{ReplaceAll .ReturnType "$" "_"}} {{ReplaceAll $.ClassName "$" "_"}}::{{.Name}}{{if IsReserved .Name}}_{{end}}({{range $index, $element := .ArgumentTypes}}{{if $index}}, {{end}}{{if IsPrimitive $element}}{{$element}}{{else}}const {{ReplaceAll $element "$" "_"}}&{{end}} _{{$index}}{{end}})
 {
   {{if ne .ReturnType "void"}}return {{end}}{{range $.NamespacePrefix}}{{.}}::{{end}}JNIHelper::callMethod<{{ReplaceAll .ReturnType "$" "_"}}>(this->obj_, "{{.Name}}", "{{.Signature}}"{{range $index, $element := .ArgumentTypes}}, _{{$index}}{{end}});
 }
@@ -77,30 +81,30 @@ String::String(const std::string& s)
 
 {{range .Fields}}
 {{if .IsEnum}}
-{{ReplaceAll .Type "$" "_"}} {{ReplaceAll $.ClassName "$" "_"}}::get{{.Name | SnakeCase | UpperCamelCase}}EnumField()
+{{$.MacroPrefix}}INLINE {{ReplaceAll .Type "$" "_"}} {{ReplaceAll $.ClassName "$" "_"}}::get{{.Name | SnakeCase | UpperCamelCase}}EnumField()
 {
   return {{range $.NamespacePrefix}}{{.}}::{{end}}JNIHelper::getStaticField<{{ReplaceAll .Type "$" "_"}}>("{{$.PackageName}}/{{$.ClassName}}", "{{.Name}}", "{{.Signature}}");
 }
 {{else}}
 {{if .IsStatic}}
 {{if not .IsFinal}}
-void {{ReplaceAll $.ClassName "$" "_"}}::set{{.Name | SnakeCase | UpperCamelCase}}StaticField({{if IsPrimitive .Type}}{{.Type}}{{else}}const {{ReplaceAll .Type "$" "_"}}&{{end}} x)
+{{$.MacroPrefix}}INLINE void {{ReplaceAll $.ClassName "$" "_"}}::set{{.Name | SnakeCase | UpperCamelCase}}StaticField({{if IsPrimitive .Type}}{{.Type}}{{else}}const {{ReplaceAll .Type "$" "_"}}&{{end}} x)
 {
   {{range $.NamespacePrefix}}{{.}}::{{end}}JNIHelper::setStaticField("{{$.PackageName}}/{{$.ClassName}}", "{{.Name}}", "{{.Signature}}", x);
 }
 {{end}}
-{{ReplaceAll .Type "$" "_"}} {{ReplaceAll $.ClassName "$" "_"}}::get{{.Name | SnakeCase | UpperCamelCase}}StaticField()
+{{$.MacroPrefix}}INLINE {{ReplaceAll .Type "$" "_"}} {{ReplaceAll $.ClassName "$" "_"}}::get{{.Name | SnakeCase | UpperCamelCase}}StaticField()
 {
   return {{range $.NamespacePrefix}}{{.}}::{{end}}JNIHelper::getStaticField<{{ReplaceAll .Type "$" "_"}}>("{{$.PackageName}}/{{$.ClassName}}", "{{.Name}}", "{{.Signature}}");
 }
 {{else}}
 {{if not .IsFinal}}
-void {{ReplaceAll $.ClassName "$" "_"}}::set{{.Name | SnakeCase | UpperCamelCase}}Field({{if IsPrimitive .Type}}{{.Type}}{{else}}const {{ReplaceAll .Type "$" "_"}}&{{end}} x)
+{{$.MacroPrefix}}INLINE void {{ReplaceAll $.ClassName "$" "_"}}::set{{.Name | SnakeCase | UpperCamelCase}}Field({{if IsPrimitive .Type}}{{.Type}}{{else}}const {{ReplaceAll .Type "$" "_"}}&{{end}} x)
 {
   {{range $.NamespacePrefix}}{{.}}::{{end}}JNIHelper::setField(this->obj_, "{{.Name}}", "{{.Signature}}", x);
 }
 {{end}}
-{{ReplaceAll .Type "$" "_"}} {{ReplaceAll $.ClassName "$" "_"}}::get{{.Name | SnakeCase | UpperCamelCase}}Field() const
+{{$.MacroPrefix}}INLINE {{ReplaceAll .Type "$" "_"}} {{ReplaceAll $.ClassName "$" "_"}}::get{{.Name | SnakeCase | UpperCamelCase}}Field() const
 {
   return {{range $.NamespacePrefix}}{{.}}::{{end}}JNIHelper::getField<{{ReplaceAll .Type "$" "_"}}>(this->obj_, "{{.Name}}", "{{.Signature}}");
 }
@@ -109,7 +113,7 @@ void {{ReplaceAll $.ClassName "$" "_"}}::set{{.Name | SnakeCase | UpperCamelCase
 {{end}}
 
 {{if eq .FullName "java/lang/String"}}
-String::operator std::string() const
+{{.MacroPrefix}}INLINE String::operator std::string() const
 {
   auto env = JNIHelper::getJNIEnv();
   auto str = reinterpret_cast<jstring>(this->obj_);
@@ -121,7 +125,7 @@ String::operator std::string() const
 }
 {{end}}
 
-{{ReplaceAll .ClassName "$" "_"}}& {{ReplaceAll .ClassName "$" "_"}}::operator=({{ReplaceAll .ClassName "$" "_"}}&& rhs) noexcept
+{{.MacroPrefix}}INLINE {{ReplaceAll .ClassName "$" "_"}}& {{ReplaceAll .ClassName "$" "_"}}::operator=({{ReplaceAll .ClassName "$" "_"}}&& rhs) noexcept
 {
   {{if .SuperClass}}base_type::operator=(std::move(rhs));{{else}}this->obj_ = rhs.obj_;
   rhs.obj_ = nullptr;{{end}}
